@@ -30,20 +30,20 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-#add_executable(uav_marker_node src/uav_markers.cpp)
-#ament_target_dependencies(uav_marker_node rclcpp std_msgs geometry_msgs visualization_msgs px4_msgs)
+add_executable(asmc_node src/asmc.cpp)
+ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
 
 ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
-  tello_vicon/pd.py
-  tello_vicon/ref.py
+  tello_vicon/tello_wrapper.py
+  tello_vicon/reference.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-#install(TARGETS
-#  uav_marker_node
-#  DESTINATION lib/${PROJECT_NAME}
-#)
+install(TARGETS
+  asmc_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 ament_package()

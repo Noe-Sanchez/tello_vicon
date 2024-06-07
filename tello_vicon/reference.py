@@ -19,7 +19,7 @@ class TelloReference(Node):
 
     # Create publisher
     #self.reference_publisher = self.create_publisher(PoseStamped, 'tello/reference', 10)
-    self.reference_publisher = self.create_publisher(PoseStamped, 'tello/reference', qos_profile)
+    self.reference_publisher = self.create_publisher(PoseStamped, 'tello/reference/position', qos_profile)
 
     # Initialize variables
     self.reference_pose = PoseStamped()
@@ -40,7 +40,7 @@ class TelloReference(Node):
     self.reference_publisher.publish(self.reference_pose)
 
 def main(args=None) -> None:
-    print('Starting tello control node...')
+    print('Starting tello reference node...')
     rclpy.init(args=args)
     tello_reference = TelloReference()
     rclpy.spin(tello_reference)
