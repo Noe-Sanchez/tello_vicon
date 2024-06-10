@@ -96,6 +96,16 @@ class Differentiator : public rclcpp::Node{
       w_hat = Eigen::Vector3d::Zero();
       w_hat_dot = Eigen::Vector3d::Zero();
 
+      varsigma_tilde = Eigen::Vector3d::Zero();
+      varsigma1_hat = Eigen::Vector3d::Zero();
+      varsigma1_hat_dot = Eigen::Vector3d::Zero();
+      varsigma2_hat = Eigen::Vector3d::Zero();
+      varsigma2_hat_dot = Eigen::Vector3d::Zero();
+      lin_vicon = Eigen::Vector3d::Zero();
+
+      lambda2 = 2 * lambda1 - 1;
+      varphi2 = 2 * varphi1 - 1;
+
       // Sanity print
       std::cout << "Differentiator node has been started." << std::endl;
       std::cout << "q_hat: " << q_hat << std::endl;
@@ -104,6 +114,12 @@ class Differentiator : public rclcpp::Node{
       std::cout << "e_hat: " << e_hat << std::endl;
       std::cout << "w_hat: " << w_hat << std::endl;
       std::cout << "w_hat_dot: " << w_hat_dot << std::endl;
+      std::cout << "varsigma_tilde: " << varsigma_tilde << std::endl;
+      std::cout << "varsigma1_hat: " << varsigma1_hat << std::endl;
+      std::cout << "varsigma1_hat_dot: " << varsigma1_hat_dot << std::endl;
+      std::cout << "varsigma2_hat: " << varsigma2_hat << std::endl;
+      std::cout << "varsigma2_hat_dot: " << varsigma2_hat_dot << std::endl;
+      std::cout << "lin_vicon: " << lin_vicon << std::endl;
 
     }
 
@@ -155,7 +171,31 @@ class Differentiator : public rclcpp::Node{
 
       // Normalize q_hat
       q_hat = q_hat / q_hat.norm();
+
+
+      lin_vicon << vicon_pose.pose.position.x,
+	           vicon_pose.pose.position.y,
+		   vicon_pose.pose.position.z;
+
+      // Linear error
+      varsigma_tilde = lin_vicon - varsigma1_hat;
+
+      // Second state calculation
+      varsigma2_hat_dot = G2 * sig(varsigma_tilde, lambda2) + Q2 * sig(varsigma_tilde, varphi2);
+
+      // Integrate varsigma2_hat_dot to get varsigma2_hat
+      varsigma2_hat += varsigma2_hat_dot * 0.01;
+
+      // First state calculation
+      varsigma1_hat_dot = varsigma2_hat + G1 * sig(varsigma_tilde, lambda1) + Q1 * sig(varsigma_tilde, varphi1);
+
+      // Integrate varsigma1_hat_dot to get varsigma1_hat
+      varsigma1_hat += varsigma1_hat_dot * 0.01;
+
       
+      estimated_pose.pose.position.x = varsigma1_hat(0);
+      estimated_pose.pose.position.y = varsigma1_hat(1);
+      estimated_pose.pose.position.z = varsigma1_hat(2);
       estimated_pose.pose.orientation.w = q_hat(0);
       estimated_pose.pose.orientation.x = q_hat(1);
       estimated_pose.pose.orientation.y = q_hat(2);
@@ -163,11 +203,17 @@ class Differentiator : public rclcpp::Node{
       estimated_pose.header.stamp = this->now();
       estimated_pose.header.frame_id = vicon_pose.header.frame_id;
 
-      estimated_velocity.linear.x = w_hat(0);
-      estimated_velocity.linear.y = w_hat(1);
-      estimated_velocity.linear.z = w_hat(2);
+      estimated_velocity.linear.x = varsigma2_hat(0); 
+      estimated_velocity.linear.y = varsigma2_hat(1);
+      estimated_velocity.linear.z = varsigma2_hat(2);
+      estimated_velocity.angular.x = w_hat(0);
+      estimated_velocity.angular.y = w_hat(1);
+      estimated_velocity.angular.z = w_hat(2);
 
       // Publish estimated pose error
+      estimated_pose_error.pose.position.x = varsigma_tilde(0);
+      estimated_pose_error.pose.position.y = varsigma_tilde(1);
+      estimated_pose_error.pose.position.z = varsigma_tilde(2);
       estimated_pose_error.pose.orientation.w = q_tilde(0);
       estimated_pose_error.pose.orientation.x = q_tilde(1);
       estimated_pose_error.pose.orientation.y = q_tilde(2);
@@ -198,12 +244,26 @@ class Differentiator : public rclcpp::Node{
     Eigen::Vector3d w_hat;
     Eigen::Vector3d w_hat_dot;
     Eigen::Vector3d w_aux;
+    Eigen::Vector3d lin_vicon;
+    Eigen::Vector3d varsigma_tilde;
+    Eigen::Vector3d varsigma1_hat;
+    Eigen::Vector3d varsigma1_hat_dot;
+    Eigen::Vector3d varsigma2_hat;
+    Eigen::Vector3d varsigma2_hat_dot;
     double epsilon1 = 5;
     double epsilon2 = 6;
     double mu1 = 5;
     double mu2 = 6;
     double alpha = 0.6;
     double beta = 1.2;
+    double lambda1 = 0.6;
+    double lambda2;
+    double varphi1 = 1.1;
+    double varphi2;
+    double G1 = 1;
+    double G2 = 1;
+    double Q1 = 1;
+    double Q2 = 1;
 
     rclcpp::TimerBase::SharedPtr estimator_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vicon_subscriber;
