@@ -256,14 +256,14 @@ class Differentiator : public rclcpp::Node{
     double mu2 = 6;
     double alpha = 0.6;
     double beta = 1.2;
-    double lambda1 = 0.6;
+    double lambda1 = 0.65;
     double lambda2;
-    double varphi1 = 1.1;
+    double varphi1 = 1.2;
     double varphi2;
-    double G1 = 1;
-    double G2 = 1;
-    double Q1 = 1;
-    double Q2 = 1;
+    double G1 = 5;
+    double G2 = 6;
+    double Q1 = 5;
+    double Q2 = 6;
 
     rclcpp::TimerBase::SharedPtr estimator_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vicon_subscriber;
