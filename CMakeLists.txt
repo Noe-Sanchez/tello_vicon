@@ -21,12 +21,14 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-#add_executable(asmc_node src/asmc.cpp)
-#ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
+add_executable(asmc_node src/asmc.cpp)
+ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
 add_executable(differentiator_node src/differentiator.cpp)
 ament_target_dependencies(differentiator_node rclcpp std_msgs geometry_msgs)
 add_executable(pid_node src/pid.cpp)
 ament_target_dependencies(pid_node rclcpp std_msgs geometry_msgs)
+add_executable(pid2_node src/pid2.cpp)
+ament_target_dependencies(pid2_node rclcpp std_msgs geometry_msgs)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -38,9 +40,10 @@ install(PROGRAMS
 )
 
 install(TARGETS
-  #asmc_node
+  asmc_node
   differentiator_node
   pid_node
+  pid2_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

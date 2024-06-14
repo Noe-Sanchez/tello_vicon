@@ -76,9 +76,9 @@ class Differentiator : public rclcpp::Node{
       vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/tello2/tello2", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
 
       // Publishers
-      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("estimator/pose", 10);
-      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::Twist>("estimator/velocity", 10);
-      estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("estimator/pose_error", 10);
+      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);
+      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10);
+      estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose_error", 10);
 
       // Make 0.01s timer
       estimator_timer = this->create_wall_timer(10ms, std::bind(&Differentiator::estimator_callback, this));

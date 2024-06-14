@@ -11,7 +11,7 @@ class TelloWrapper(Node):
     super().__init__('tello_wrapper')
 
     # Create subscribers
-    self.control_subscriber = self.create_subscription(Twist, "/tello/control/uaux", self.control_callback, 10)
+    self.control_subscriber = self.create_subscription(Twist, "/tello/control/uaux", self.control_input_callback, 10)
     self.enable_susbcriber = self.create_subscription(String, "/tello/enable", self.enable_callback, 10)
 
     self.battery_publisher = self.create_publisher(Int32, "/tello/battery", 10)
@@ -19,9 +19,11 @@ class TelloWrapper(Node):
     # Initialize variables
     self.enable = False
     self.battery = Int32()
+    self.control_input = Twist()
 
     # Create a timer to publish control commands
     self.battery_timer = self.create_timer(1, self.battery_callback)
+    self.control_timer = self.create_timer(0.1, self.control_callback)
 
     # Initialize Tello
     self.tello = Tello("192.168.0.148", 8889)
@@ -48,12 +50,16 @@ class TelloWrapper(Node):
     self.battery.data = battery
     self.battery_publisher.publish(self.battery)
 
-  def control_callback(self, msg):
+  def control_input_callback(self, msg):
+    self.control_input = msg    
+
+  def control_callback(self):
     if self.enable:
+      msg = self.control_input
       #self.tello.send_rc_control(-int(cy), int(cx), int(cz), 0)
       #self.tello.send_rc_control(-msg.linear.x, msg.linear.y, msg.linear.z, 0)
-      self.tello.send_rc_control(-int(msg.linear.y), int(msg.linear.x), int(msg.linear.z), 0)
-      print("Control: ", msg.linear.x, msg.linear.y, msg.linear.z, 0)
+      self.tello.send_rc_control(int(msg.linear.x), int(msg.linear.y), int(msg.linear.z), int(msg.angular.z))
+      print("Control: ", msg.linear.x, msg.linear.y, msg.linear.z, msg.angular.z)
 
 def main(args=None) -> None:
     print('Starting tello wrapper node...')

@@ -14,7 +14,7 @@ class PidController : public rclcpp::Node{
     PidController(): Node("pid_node"){
       // Subscribers
       vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/tello2/tello2", 10, std::bind(&PidController::vicon_callback, this, std::placeholders::_1));
-      position_reference_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/position", 10, std::bind(&PidController::position_reference_callback, this, std::placeholders::_1));
+      position_reference_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&PidController::position_reference_callback, this, std::placeholders::_1));
 
       // Publishers
       uaux_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
