@@ -182,8 +182,8 @@ class AsmcController : public rclcpp::Node{
       error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
       ref_rot_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/ref_rot", 10);
 
-      // Make 0.1s timer
-      control_timer = this->create_wall_timer(100ms, std::bind(&AsmcController::control_callback, this));
+      // Make 0.5s timer
+      control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables
       zetta1 << 1, 1, 1.5, 1;
@@ -265,8 +265,9 @@ class AsmcController : public rclcpp::Node{
 
       e << reference_pose.pose.position.x - estimator_pose.pose.position.x,
            reference_pose.pose.position.y - estimator_pose.pose.position.y,
-           reference_pose.pose.position.z - estimator_pose.pose.position.z,
-           eta_e(3);
+           //reference_pose.pose.position.z - estimator_pose.pose.position.z,
+           1-estimator_pose.pose.position.z,
+	   eta_e(3);
       
       //std::cout << "Error: x" << e(0) << " y: " << e(1) << " z: " << e(2) << " psi: " << e(3) << std::endl;
       //std::cout << "Ref rot: x" << ref_rot(1) << " y: " << ref_rot(2) << " z: " << ref_rot(3) << std::endl;
@@ -298,7 +299,7 @@ class AsmcController : public rclcpp::Node{
       //K_dot << ewise(alpha.pow(0.5), sigma.cwiseAbs().pow(0.5)) + ewise(beta.pow(0.5), K.pow(2));
 
       // Euler integrate K_dot to get K
-      K += K_dot * 0.1;
+      K += K_dot * 0.01;
 
       // Saturate K
       for (int i = 0; i < 4; i++){

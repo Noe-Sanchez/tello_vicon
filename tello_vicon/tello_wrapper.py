@@ -23,7 +23,7 @@ class TelloWrapper(Node):
 
     # Create a timer to publish control commands
     self.battery_timer = self.create_timer(1, self.battery_callback)
-    self.control_timer = self.create_timer(0.1, self.control_callback)
+    self.control_timer = self.create_timer(0.01, self.control_callback)
 
     # Initialize Tello
     self.tello = Tello("192.168.0.148", 8889)
