@@ -188,10 +188,10 @@ class AsmcController : public rclcpp::Node{
       // Initialize variables
       zetta1 << 1, 1, 1.5, 1;
       zetta2 << 1, 1, 1.25, 1;
-      lambda1 << 2.5, 2.5, 1.75, 2;
+      lambda1 << 1.5, 1.5, 0.75, 1;
       lambda2 << 1.25, 1.25, 1.25, 1.2;
-      alpha << 1.25, 1.25, 1.25, 1.25;
-      beta << 1.5, 1.5, 0.75, 1.2;
+      alpha << 0.5, 0.5, 0.5, 0.5;
+      beta << 0.25, 0.25, 0.15, 0.2;
 
       e << 0, 0, 0, 0;
       ref_rot << 0, 0, 0, 0;
@@ -241,6 +241,14 @@ class AsmcController : public rclcpp::Node{
       // Logarithmic mapping of q_e (0, eta_e_phi, eta_e_theta, eta_e_psi)
       eta_e << qlm(q_e);
 
+      // Check for NaN in eta_e
+      for (int i = 0; i < 4; i++){
+        if (std::isnan(eta_e(i))){
+          eta_e(i) = 0;
+        }
+      }
+
+
       // Error definition
       //ref_rot << 0, reference_pose.pose.position.x, reference_pose.pose.position.y, reference_pose.pose.position.z;
       //ref_rot << kronecker(q_hat, kronecker(ref_rot, q_hat_conj));
@@ -265,9 +273,9 @@ class AsmcController : public rclcpp::Node{
 
       e << reference_pose.pose.position.x - estimator_pose.pose.position.x,
            reference_pose.pose.position.y - estimator_pose.pose.position.y,
-           //reference_pose.pose.position.z - estimator_pose.pose.position.z,
-           1-estimator_pose.pose.position.z,
-	   eta_e(3);
+           reference_pose.pose.position.z - estimator_pose.pose.position.z,
+           //1-estimator_pose.pose.position.z,
+	         eta_e(3);
       
       //std::cout << "Error: x" << e(0) << " y: " << e(1) << " z: " << e(2) << " psi: " << e(3) << std::endl;
       //std::cout << "Ref rot: x" << ref_rot(1) << " y: " << ref_rot(2) << " z: " << ref_rot(3) << std::endl;
@@ -284,9 +292,9 @@ class AsmcController : public rclcpp::Node{
 
       // Check for NaN in sigma
       for (int i = 0; i < 4; i++){
-	if (std::isnan(sigma(i))){
-	  sigma(i) = 0;
-	}
+	      if (std::isnan(sigma(i))){
+	        sigma(i) = 0;
+	      }
       }
 
       K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) + ewise(exp4(beta, 0.5), exp4(K, 2));
@@ -303,11 +311,11 @@ class AsmcController : public rclcpp::Node{
 
       // Saturate K
       for (int i = 0; i < 4; i++){
-	if (K(i) > 1){
-	  K(i) = 1;
-	} else if (K(i) < -1){
-	  K(i) = -1;
-	}
+	      if (K(i) > 1){
+	        K(i) = 1;
+	      } else if (K(i) < -1){
+	        K(i) = -1;
+	      }
       }
 
       // Control law
@@ -316,7 +324,7 @@ class AsmcController : public rclcpp::Node{
       // Control law using ewise
       uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
       
-      //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
+      std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
 
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
