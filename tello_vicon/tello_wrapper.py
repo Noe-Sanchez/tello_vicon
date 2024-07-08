@@ -28,6 +28,10 @@ class TelloWrapper(Node):
     # Initialize Tello
     self.tello = Tello("192.168.0.148", 8889)
     self.tello.connect()
+    self.tello.set_speed(100)
+    #self.tello.end()
+    #self.tello = Tello("192.168.0.148", 8889)
+    #self.tello.connect()
 
     battery = self.tello.get_battery()
 
@@ -68,6 +72,7 @@ def main(args=None) -> None:
     rclpy.spin(tello_wrapper)
     tello_wrapper.tello.end()
     tello_wrapper.destroy_node()
+    print('Ending tello connection')
     rclpy.shutdown()
 
 if __name__ == '__main__':
