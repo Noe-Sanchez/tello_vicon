@@ -21,6 +21,8 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+include_directories(include/tello_low_level)
+
 add_executable(asmc_node src/asmc.cpp)
 ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
 add_executable(differentiator_node src/differentiator.cpp)
@@ -29,6 +31,12 @@ add_executable(pid_node src/pid.cpp)
 ament_target_dependencies(pid_node rclcpp std_msgs geometry_msgs)
 add_executable(pid2_node src/pid2.cpp)
 ament_target_dependencies(pid2_node rclcpp std_msgs geometry_msgs)
+add_executable(tello_low_wrapper src/tello_low_wrapper.cpp)
+ament_target_dependencies(tello_low_wrapper rclcpp std_msgs geometry_msgs visualization_msgs tf2_ros)
+
+#Build and include tello c library
+#add_library(tello_low_level STATIC include/tello_low_level/tello.c)
+#target_link_libraries(tello_low_wrapper tello_low_level)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -44,6 +52,7 @@ install(TARGETS
   differentiator_node
   pid_node
   pid2_node
+  tello_low_wrapper
   DESTINATION lib/${PROJECT_NAME}
 )
 
