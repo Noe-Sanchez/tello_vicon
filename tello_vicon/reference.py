@@ -27,7 +27,7 @@ class TelloReference(Node):
     self.reference_pose.header.frame_id = 'world'
     self.reference_velocity = Twist()
 
-    self.timer = self.create_timer(0.1, self.timer_callback)
+    self.timer = self.create_timer(0.01, self.timer_callback)
     self.time = 0
 
   def timer_callback(self) -> None:
@@ -46,7 +46,7 @@ class TelloReference(Node):
     self.reference_velocity.angular.y = 0.0
     self.reference_velocity.angular.z = 0.0
 
-    self.time += 0.1
+    self.time += 0.01
 
     self.reference_publisher.publish(self.reference_pose)
     self.reference_velocity_publisher.publish(self.reference_velocity)
