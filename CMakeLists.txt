@@ -29,6 +29,8 @@ add_executable(pid_node src/pid.cpp)
 ament_target_dependencies(pid_node rclcpp std_msgs geometry_msgs)
 add_executable(pid2_node src/pid2.cpp)
 ament_target_dependencies(pid2_node rclcpp std_msgs geometry_msgs)
+add_executable(formations_node src/formations.cpp)
+ament_target_dependencies(formations_node rclcpp std_msgs geometry_msgs visualization_msgs tf2_ros)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -44,6 +46,7 @@ install(TARGETS
   differentiator_node
   pid_node
   pid2_node
+  formations_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
