@@ -191,7 +191,7 @@ class AsmcController : public rclcpp::Node{
       // lambda1 > lambda2
       lambda1 << 2, 2, 2, 2;
       lambda2 << 1.3, 1.3, 1.3, 1.3;
-      alpha << 0.05, 0.05, 0.1, 0.1;
+      alpha << 0.1, 0.1, 0.1, 0.1;
       beta << 5, 5, 1, 5;
 
       e << 0, 0, 0, 0;
