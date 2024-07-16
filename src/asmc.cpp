@@ -185,13 +185,14 @@ class AsmcController : public rclcpp::Node{
       // Make 0.5s timer
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
-      // Initialize variables
-      zetta1 << 1, 1, 1.5, 1;
-      zetta2 << 1, 1, 1.25, 1;
-      lambda1 << 1.5, 1.5, 0.75, 1;
-      lambda2 << 1.25, 1.25, 1.25, 1.2;
-      alpha << 0.5, 0.5, 0.5, 0.5;
-      beta << 0.25, 0.25, 0.15, 0.2;
+      // Initialize variables 
+      zetta1 << 1.5, 1.5, 1.5, 1.5;
+      zetta2 << 1.65, 1.65, 2, 2;
+      // lambda1 > lambda2
+      lambda1 << 2, 2, 2, 2;
+      lambda2 << 1.3, 1.3, 1.3, 1.3;
+      alpha << 0.05, 0.05, 0.1, 0.1;
+      beta << 5, 5, 1, 5;
 
       e << 0, 0, 0, 0;
       ref_rot << 0, 0, 0, 0;
@@ -205,6 +206,14 @@ class AsmcController : public rclcpp::Node{
       K_dot << 0, 0, 0, 0;
       sigma << 0, 0, 0, 0;
       uaux << 0, 0, 0, 0;
+
+      reference_pose.pose.position.x = 0;
+      reference_pose.pose.position.y = 0;
+      reference_pose.pose.position.z = 1;
+      reference_pose.pose.orientation.w = 1;
+      reference_pose.pose.orientation.x = 0;
+      reference_pose.pose.orientation.y = 0;
+      reference_pose.pose.orientation.z = 0;
 
     }
 
@@ -297,11 +306,12 @@ class AsmcController : public rclcpp::Node{
 	      }
       }
 
-      K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) + ewise(exp4(beta, 0.5), exp4(K, 2));
+      K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
 
       //std::cout << "Sigma: x" << sigma(0) << " y: " << sigma(1) << " z: " << sigma(2) << " psi: " << sigma(3) << std::endl;
       std::cout << "Sigma_abs: x" << sigma.cwiseAbs()(0) << " y: " << sigma.cwiseAbs()(1) << " z: " << sigma.cwiseAbs()(2) << " psi: " << sigma.cwiseAbs()(3) << std::endl;
       std::cout << "K_dot: x" << K_dot(0) << " y: " << K_dot(1) << " z: " << K_dot(2) << " psi: " << K_dot(3) << std::endl;
+      std::cout << "K: x" << K(0) << " y: " << K(1) << " z: " << K(2) << " psi: " << K(3) << std::endl;
 
       //sigma << e + ewise(zetta1, sig4(e, lambda1)) + ewise(zetta2, sig4(e_dot, lambda2));
       //K_dot << ewise(alpha.pow(0.5), sigma.cwiseAbs().pow(0.5)) + ewise(beta.pow(0.5), K.pow(2));
@@ -311,10 +321,10 @@ class AsmcController : public rclcpp::Node{
 
       // Saturate K
       for (int i = 0; i < 4; i++){
-	      if (K(i) > 1){
-	        K(i) = 1;
-	      } else if (K(i) < -1){
-	        K(i) = -1;
+	      if (K(i) > 10){
+	        K(i) = 10;
+	      } else if (K(i) < -10){
+	        K(i) = -10;
 	      }
       }
 
@@ -324,7 +334,7 @@ class AsmcController : public rclcpp::Node{
       // Control law using ewise
       uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
       
-      std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
+      //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
 
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
@@ -334,10 +344,10 @@ class AsmcController : public rclcpp::Node{
 
       // Normalize control output
       
-      uaux(0) = 50 * (uaux(0) + 1.6)/(3.2) - 25;
-      uaux(1) = 50 * (uaux(1) + 1.6)/(3.2) - 25;
-      uaux(2) = 50 * (uaux(2) + 0.9)/(1.9) - 25;
-      uaux(3) = 50 * (uaux(3) + 1.0)/(2.0) - 25;
+      uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
+      uaux(1) = 100 * (uaux(1) + 1.6)/(3.2) - 50;
+      uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
+      uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
 
       // Rotate control output in x and y
       Eigen::Vector4d uaux_rot;
@@ -362,9 +372,13 @@ class AsmcController : public rclcpp::Node{
       _error.pose.position.z = e(2);
       _error.pose.orientation.w = e(3);
 
-      _ref_rot.pose.position.x = ref_rot(1);
-      _ref_rot.pose.position.y = ref_rot(2);
-      _ref_rot.pose.position.z = ref_rot(3);
+      //_ref_rot.pose.position.x = ref_rot(1);
+      //_ref_rot.pose.position.y = ref_rot(2);
+      //_ref_rot.pose.position.z = ref_rot(3);
+      _ref_rot.pose.position.x = K(0);
+      _ref_rot.pose.position.y = K(1);
+      _ref_rot.pose.position.z = K(2);
+      _ref_rot.pose.orientation.w = K(3);
       _ref_rot.pose.orientation.w = reference_pose.pose.orientation.w;
       _ref_rot.pose.orientation.x = reference_pose.pose.orientation.x;
       _ref_rot.pose.orientation.y = reference_pose.pose.orientation.y;
