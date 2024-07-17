@@ -186,12 +186,12 @@ class AsmcController : public rclcpp::Node{
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
-      zetta1 << 1.5, 1.5, 1.5, 1.5;
-      zetta2 << 1.65, 1.65, 2, 2;
+      zetta1 << 1.75, 1.75, 1.5, 1.5;
+      zetta2 << 1.5, 1.5, 2, 2;
       // lambda1 > lambda2
       lambda1 << 2, 2, 2, 2;
       lambda2 << 1.3, 1.3, 1.3, 1.3;
-      alpha << 0.1, 0.1, 0.1, 0.1;
+      alpha << 0.075, 0.075, 0.1, 0.1;
       beta << 5, 5, 1, 5;
 
       e << 0, 0, 0, 0;
@@ -207,7 +207,7 @@ class AsmcController : public rclcpp::Node{
       sigma << 0, 0, 0, 0;
       uaux << 0, 0, 0, 0;
 
-      reference_pose.pose.position.x = 0;
+      reference_pose.pose.position.x = -3;
       reference_pose.pose.position.y = 0;
       reference_pose.pose.position.z = 1;
       reference_pose.pose.orientation.w = 1;
@@ -332,7 +332,8 @@ class AsmcController : public rclcpp::Node{
       //uaux << -2 * K * sig4(sigma, 0.5) - exp4(K, 2) * sigma * 0.5;
 
       // Control law using ewise
-      uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
+      //uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
+      uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(K, sigma) * 0.5;
       
       //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
 
