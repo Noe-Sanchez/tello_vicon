@@ -26,14 +26,14 @@ class FormationsHandler : public rclcpp::Node{
 
       transform_timer = this->create_wall_timer(1ms, std::bind(&FormationsHandler::transform_timer_callback, this));
 
-      this->declare_parameter("num_followers", 5);
+      this->declare_parameter("num_followers", 3);
 
       std::cout << "Broadcasting configurations" << std::endl;
 
       // Initial formation
       centroid.pose.position.x = 0;
       centroid.pose.position.y = 0;
-      centroid.pose.position.z = 1;
+      centroid.pose.position.z = 0.5;
       centroid.pose.orientation.x = 0;
       centroid.pose.orientation.y = 0;
       centroid.pose.orientation.z = 0;

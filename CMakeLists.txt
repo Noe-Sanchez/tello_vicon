@@ -31,6 +31,11 @@ add_executable(pid2_node src/pid2.cpp)
 ament_target_dependencies(pid2_node rclcpp std_msgs geometry_msgs)
 add_executable(formations_node src/formations.cpp)
 ament_target_dependencies(formations_node rclcpp std_msgs geometry_msgs visualization_msgs tf2_ros)
+add_executable(unity_ui_node src/unity_ui.cpp)
+ament_target_dependencies(unity_ui_node rclcpp std_msgs geometry_msgs)
+
+add_executable(test_node src/test.cpp)
+ament_target_dependencies(test_node rclcpp std_msgs geometry_msgs)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -47,6 +52,8 @@ install(TARGETS
   pid_node
   pid2_node
   formations_node
+  test_node
+  unity_ui_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
