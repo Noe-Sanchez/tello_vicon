@@ -33,6 +33,10 @@ add_executable(formations_node src/formations.cpp)
 ament_target_dependencies(formations_node rclcpp std_msgs geometry_msgs visualization_msgs tf2_ros)
 add_executable(unity_ui_node src/unity_ui.cpp)
 ament_target_dependencies(unity_ui_node rclcpp std_msgs geometry_msgs)
+add_executable(asmc_avoidance_node src/asmc_avoidance.cpp)
+ament_target_dependencies(asmc_avoidance_node rclcpp std_msgs geometry_msgs)
+add_executable(simple_dynamics_node src/simple_dynamics.cpp)
+ament_target_dependencies(simple_dynamics_node rclcpp std_msgs geometry_msgs tf2_ros)
 
 add_executable(test_node src/test.cpp)
 ament_target_dependencies(test_node rclcpp std_msgs geometry_msgs)
@@ -48,6 +52,8 @@ install(PROGRAMS
 
 install(TARGETS
   asmc_node
+  asmc_avoidance_node
+  simple_dynamics_node
   differentiator_node
   pid_node
   pid2_node

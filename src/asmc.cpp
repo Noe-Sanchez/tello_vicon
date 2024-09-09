@@ -88,9 +88,9 @@ Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector4d p){
   */
 
   q_matrix << q(0), -q(1), -q(2), -q(3),
-	      q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
+	            q(1),  q(0), -q(3),  q(2),
+	            q(2),  q(3),  q(0), -q(1),
+	            q(3), -q(2),  q(1),  q(0);
 	      
   p_vector = q_matrix * p;
   
@@ -104,9 +104,9 @@ Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector3d p){
   p_vector << 0, p(0), p(1), p(2);
 
   q_matrix << q(0), -q(1), -q(2), -q(3),
-	      q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
+	            q(1),  q(0), -q(3),  q(2),
+	            q(2),  q(3),  q(0), -q(1),
+	            q(3), -q(2),  q(1),  q(0);
 	      
   p_vector = q_matrix * p_vector;
   
@@ -116,17 +116,23 @@ Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector3d p){
 Eigen::Vector4d qlm(Eigen::Vector4d q){
   Eigen::Vector4d q_log;
 
+  //double norm = sqrt(q(0)*q(0) + q(1)*q(1) + q(2)*q(2) + q(3)*q(3));
   double norm = sqrt(q(1)*q(1) + q(2)*q(2) + q(3)*q(3));
 
-  if (norm == 0){
+  if (norm < 0.01){
     q_log << 0, 0, 0, 0;
   } else {
     // Use arccos to get the angle
-    q_log << 0, q(1)/norm, q(2)/norm, q(3)/norm; 
+    q_log << 0, q(1)/norm, q(2)/norm, q(3)/norm;
+    if (q(0) > 1){
+      q(0) = 1;
+    } else if (q(0) < -1){
+      q(0) = -1;
+    }
     q_log = acos(q(0)) * q_log;
   }
 
-  return q_log;
+  return 2*q_log;
 }
 
 Eigen::Vector4d exp4(Eigen::Vector4d v, double exponent){
@@ -154,6 +160,7 @@ class AsmcController : public rclcpp::Node{
     AsmcController(): Node("asmc_node"){
       // Subscribers
       estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
+      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
       estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
       reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
@@ -171,7 +178,7 @@ class AsmcController : public rclcpp::Node{
       zetta1 << 1.75, 1.75, 1.5, 1.5;
       zetta2 << 1.5, 1.5, 2, 2;
       // lambda1 > lambda2
-      lambda1 << 2, 2, 2, 2;
+      lambda1 << 2, 2, 2, 10;
       lambda2 << 1.3, 1.3, 1.3, 1.3;
       alpha << 0.075, 0.075, 0.1, 0.1;
       beta << 5, 5, 1, 5;
@@ -189,7 +196,7 @@ class AsmcController : public rclcpp::Node{
       sigma << 0, 0, 0, 0;
       uaux << 0, 0, 0, 0;
 
-      reference_pose.pose.position.x = -3;
+      reference_pose.pose.position.x = 0;
       reference_pose.pose.position.y = 0;
       reference_pose.pose.position.z = 1;
       reference_pose.pose.orientation.w = 1;
@@ -222,19 +229,21 @@ class AsmcController : public rclcpp::Node{
       q_e = kronecker(q_hat_conj, q_d);
 
       // Normalize q_e
-      double q_e_norm = sqrt(q_e(1)*q_e(1) + q_e(2)*q_e(2) + q_e(3)*q_e(3));
+      double q_e_norm = sqrt(q_e(0)*q_e(0) + q_e(1)*q_e(1) + q_e(2)*q_e(2) + q_e(3)*q_e(3));
       if (q_e_norm != 0){
-	q_e << q_e(0), q_e(1)/q_e_norm, q_e(2)/q_e_norm, q_e(3)/q_e_norm;
+	      q_e << q_e(0)/q_e_norm, q_e(1)/q_e_norm, q_e(2)/q_e_norm, q_e(3)/q_e_norm;
       }else{
 	q_e << 1, 0, 0, 0;
       }
 
       // Logarithmic mapping of q_e (0, eta_e_phi, eta_e_theta, eta_e_psi)
+      std ::cout << "q_e: w" << q_e(0) << " x: " << q_e(1) << " y: " << q_e(2) << " z: " << q_e(3) << std::endl;
       eta_e << qlm(q_e);
 
       // Check for NaN in eta_e
       for (int i = 0; i < 4; i++){
         if (std::isnan(eta_e(i))){
+          std::cout << "Eta_e is NaN at element " << i << std::endl;
           eta_e(i) = 0;
         }
       }
@@ -279,11 +288,12 @@ class AsmcController : public rclcpp::Node{
       //std::cout << "Error_dot: x" << e_dot(0) << " y: " << e_dot(1) << " z: " << e_dot(2) << " psi: " << e_dot(3) << std::endl;
 
       // Sliding surface 
-      sigma << e + ewise(zetta1, sig(e, lambda1)) + ewise(zetta2, sig(e_dot, lambda2));
+      sigma << e + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
 
       // Check for NaN in sigma
       for (int i = 0; i < 4; i++){
 	      if (std::isnan(sigma(i))){
+          std::cout << "Sigma is NaN at element " << i << std::endl;
 	        sigma(i) = 0;
 	      }
       }
@@ -291,9 +301,9 @@ class AsmcController : public rclcpp::Node{
       K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
 
       //std::cout << "Sigma: x" << sigma(0) << " y: " << sigma(1) << " z: " << sigma(2) << " psi: " << sigma(3) << std::endl;
-      std::cout << "Sigma_abs: x" << sigma.cwiseAbs()(0) << " y: " << sigma.cwiseAbs()(1) << " z: " << sigma.cwiseAbs()(2) << " psi: " << sigma.cwiseAbs()(3) << std::endl;
-      std::cout << "K_dot: x" << K_dot(0) << " y: " << K_dot(1) << " z: " << K_dot(2) << " psi: " << K_dot(3) << std::endl;
-      std::cout << "K: x" << K(0) << " y: " << K(1) << " z: " << K(2) << " psi: " << K(3) << std::endl;
+      //std::cout << "Sigma_abs: x" << sigma.cwiseAbs()(0) << " y: " << sigma.cwiseAbs()(1) << " z: " << sigma.cwiseAbs()(2) << " psi: " << sigma.cwiseAbs()(3) << std::endl;
+      //std::cout << "K_dot: x" << K_dot(0) << " y: " << K_dot(1) << " z: " << K_dot(2) << " psi: " << K_dot(3) << std::endl;
+      //std::cout << "K: x" << K(0) << " y: " << K(1) << " z: " << K(2) << " psi: " << K(3) << std::endl;
 
       //sigma << e + ewise(zetta1, sig4(e, lambda1)) + ewise(zetta2, sig4(e_dot, lambda2));
       //K_dot << ewise(alpha.pow(0.5), sigma.cwiseAbs().pow(0.5)) + ewise(beta.pow(0.5), K.pow(2));
@@ -302,13 +312,13 @@ class AsmcController : public rclcpp::Node{
       K += K_dot * 0.01;
 
       // Saturate K
-      for (int i = 0; i < 4; i++){
+      /*for (int i = 0; i < 4; i++){
 	      if (K(i) > 10){
 	        K(i) = 10;
 	      } else if (K(i) < -10){
 	        K(i) = -10;
 	      }
-      }
+      }*/
 
       // Control law
       //uaux << -2 * K * sig4(sigma, 0.5) - exp4(K, 2) * sigma * 0.5;
@@ -318,6 +328,15 @@ class AsmcController : public rclcpp::Node{
       uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
       
       //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
+      
+      // Rotate control output in x and y
+      Eigen::Vector4d uaux_rot;
+      uaux_rot << 0, uaux(0), uaux(1), 0;
+      uaux_rot = kronecker(kronecker(q_hat_conj, uaux_rot), q_hat);
+      //uaux_rot = kronecker(kronecker(q_hat, uaux_rot), q_hat_conj);     
+
+      uaux(0) = uaux_rot(1);
+      uaux(1) = uaux_rot(2);
 
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
@@ -332,14 +351,7 @@ class AsmcController : public rclcpp::Node{
       uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
 
-      // Rotate control output in x and y
-      Eigen::Vector4d uaux_rot;
-      uaux_rot << 0, uaux(0), uaux(1), 0;
-      uaux_rot = kronecker(kronecker(q_hat_conj, uaux_rot), q_hat);
-
-      uaux(0) = uaux_rot(1);
-      uaux(1) = uaux_rot(2);
-
+      
       _uaux.linear.x = -uaux(0);
       _uaux.linear.y = -uaux(1);
       _uaux.linear.z = -uaux(2);
@@ -355,13 +367,13 @@ class AsmcController : public rclcpp::Node{
       _error.pose.position.z = e(2);
       _error.pose.orientation.w = e(3);
 
-      //_ref_rot.pose.position.x = ref_rot(1);
-      //_ref_rot.pose.position.y = ref_rot(2);
-      //_ref_rot.pose.position.z = ref_rot(3);
-      _ref_rot.pose.position.x = K(0);
-      _ref_rot.pose.position.y = K(1);
-      _ref_rot.pose.position.z = K(2);
-      _ref_rot.pose.orientation.w = K(3);
+      _ref_rot.pose.position.x = uaux_rot(1);
+      _ref_rot.pose.position.y = uaux_rot(2);
+      _ref_rot.pose.position.z = uaux_rot(3);
+      //_ref_rot.pose.position.x = K(0);
+      //_ref_rot.pose.position.y = K(1);
+      //_ref_rot.pose.position.z = K(2);
+      //_ref_rot.pose.orientation.w = K(3);
       _ref_rot.pose.orientation.w = reference_pose.pose.orientation.w;
       _ref_rot.pose.orientation.x = reference_pose.pose.orientation.x;
       _ref_rot.pose.orientation.y = reference_pose.pose.orientation.y;

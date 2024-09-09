@@ -26,7 +26,8 @@ class TelloWrapper(Node):
     self.control_timer = self.create_timer(0.01, self.control_callback)
 
     # Initialize Tello
-    self.tello = Tello("192.168.0.139", 8889)
+    #self.tello = Tello("192.168.0.139", 8889)
+    self.tello = Tello("10.15.232.94", 8889)
     self.tello.connect()
     self.tello.set_speed(100)
     #self.tello.end()

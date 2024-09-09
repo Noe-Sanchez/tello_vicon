@@ -31,13 +31,13 @@ class TelloReference(Node):
     self.time = 0
 
   def timer_callback(self) -> None:
-    self.reference_pose.pose.position.x = 0.5 * math.sin(self.time)
-    self.reference_pose.pose.position.y = 0.5 * math.cos(self.time)
-    self.reference_pose.pose.position.z = 1+0.5 * math.sin(self.time/2)
+    self.reference_pose.pose.position.x = 0.5 * math.sin(self.time/4)
+    self.reference_pose.pose.position.y = 0.5 * math.cos(self.time/4)
+    self.reference_pose.pose.position.z = 1+0.5 * math.sin(self.time/8)
     self.reference_pose.pose.orientation.x = 0.0
     self.reference_pose.pose.orientation.y = 0.0
-    self.reference_pose.pose.orientation.z = 0.0
-    self.reference_pose.pose.orientation.w = 1.0
+    self.reference_pose.pose.orientation.z = 0.71
+    self.reference_pose.pose.orientation.w = 0.71
 
     self.reference_velocity.linear.x = 0.5 * math.cos(self.time)
     self.reference_velocity.linear.y = -0.5 * math.sin(self.time)

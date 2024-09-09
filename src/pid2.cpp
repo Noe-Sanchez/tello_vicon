@@ -154,7 +154,7 @@ Eigen::Vector4d qlm(Eigen::Vector4d q){
     q_log = acos(q(0)) * q_log;
   }
 
-  return q_log;
+  return 2*q_log;
 }
 
 Eigen::Vector4d exp4(Eigen::Vector4d v, double exponent){
@@ -234,6 +234,13 @@ class PidController : public rclcpp::Node{
 
       // Logarithmic mapping of q_e (0, eta_e_phi, eta_e_theta, eta_e_psi)
       eta_e << qlm(q_e);
+
+      // Check for NaN in eta_e
+      for (int i = 0; i < 4; i++){
+        if (std::isnan(eta_e(i))){
+          eta_e(i) = 0;
+        }
+      }
 
       e << reference_pose.pose.position.x - estimator_pose.pose.position.x,
            reference_pose.pose.position.y - estimator_pose.pose.position.y,
