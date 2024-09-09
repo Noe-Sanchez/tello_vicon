@@ -155,24 +155,36 @@ Eigen::Vector4d sqrt4(Eigen::Vector4d v){
   return s;
 }
 
-class AsmcController : public rclcpp::Node{
+double euclidean2(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2){
+  double distance = sqrt(pow(p1.pose.position.x - p2.pose.position.x, 2) + pow(p1.pose.position.y - p2.pose.position.y, 2));
+  return distance;
+}
+
+double euclidean3(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2){
+  double distance = sqrt(pow(p1.pose.position.x - p2.pose.position.x, 2) + pow(p1.pose.position.y - p2.pose.position.y, 2) + pow(p1.pose.position.z - p2.pose.position.z, 2));
+  return distance;
+}
+
+class AsmcAvoidanceController : public rclcpp::Node{
   public:
-    AsmcController(): Node("asmc_node"){
+    AsmcAvoidanceController(): Node("asmc_avoidance_node"){
       // Subscribers
-      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
-      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
-      estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
-      reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
-      reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
+      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcAvoidanceController::estimator_pose_callback, this, std::placeholders::_1));
+      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&AsmcAvoidanceController::estimator_pose_callback, this, std::placeholders::_1));
+      estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcAvoidanceController::estimator_velocity_callback, this, std::placeholders::_1));
+      reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcAvoidanceController::position_reference_callback, this, std::placeholders::_1));
+      reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcAvoidanceController::velocity_reference_callback, this, std::placeholders::_1));
+      wand_pose_subscriber          = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/Stick/Stick", 10, std::bind(&AsmcAvoidanceController::wand_pose_callback, this, std::placeholders::_1));
 
       // Publishers
       uaux_publisher  = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
       sigma_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/sigma", 10);
       error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
       ref_rot_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/ref_rot", 10);
+      gamma_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/gamma", 10);
 
       // Make 0.5s timer
-      control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
+      control_timer = this->create_wall_timer(10ms, std::bind(&AsmcAvoidanceController::control_callback, this));
   
       // Initialize variables 
       zetta1 << 1.75, 1.75, 1.5, 1.5;
@@ -218,7 +230,9 @@ class AsmcController : public rclcpp::Node{
     void velocity_reference_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
       reference_velocity = *msg;
     }
-
+    void wand_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
+      wand_pose = *msg;
+    }
 
     void control_callback(){
       // Conjugate q_hat
@@ -328,7 +342,31 @@ class AsmcController : public rclcpp::Node{
       uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
       
       //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
+
+      // RVF calculation
+      double D = 2.0; // Sensing distance
+      //double d = 0.5; // Safe distance
+      //float V = (pow(d,2) / (pow(estimator.pose.position.x - wand.pose.position.x, 2) + pow(estimator.pose.position.y - wand.pose.position.y, 2))) - 1 + 0.1;
+      double V = (pow(D,2) / pow(euclidean2(estimator_pose, wand_pose), 2)) - 1 + 0.1;
       
+      // Conmutation parameter
+      int delta = 0;
+      if ( euclidean2(estimator_pose, wand_pose) < D){
+        delta = 1;
+      } else {
+        delta = 0;
+      }
+
+      double fieldx = delta * V * ((estimator_pose.pose.position.x - wand_pose.pose.position.x) - (estimator_pose.pose.position.y - wand_pose.pose.position.y));
+      double fieldy = delta * V * ((estimator_pose.pose.position.x - wand_pose.pose.position.x) + (estimator_pose.pose.position.y - wand_pose.pose.position.y));
+
+      double eta = 1; // Field scaling parameter
+      
+
+      // Integrate field into uaux
+      uaux(0) -= fieldx * eta;
+      uaux(1) -= fieldy * eta;
+
       // Rotate control output in x and y
       Eigen::Vector4d uaux_rot;
       uaux_rot << 0, uaux(0), uaux(1), 0;
@@ -380,23 +418,29 @@ class AsmcController : public rclcpp::Node{
       _ref_rot.pose.orientation.z = reference_pose.pose.orientation.z;
       _ref_rot.header.frame_id = "world";
 
+      _gamma.linear.x = fieldx * eta;
+      _gamma.linear.y = fieldy * eta;
+
       uaux_publisher->publish(_uaux);
       sigma_publisher->publish(_sigma);
       error_publisher->publish(_error);
       ref_rot_publisher->publish(_ref_rot);
-      
+      gamma_publisher->publish(_gamma);
+     
     }
 
   private:
 
     geometry_msgs::msg::PoseStamped estimator_pose; 
     geometry_msgs::msg::PoseStamped reference_pose;
+    geometry_msgs::msg::PoseStamped wand_pose;
     geometry_msgs::msg::PoseStamped _error;
     geometry_msgs::msg::PoseStamped _ref_rot;
     geometry_msgs::msg::Twist estimator_velocity;
     geometry_msgs::msg::Twist reference_velocity;
     geometry_msgs::msg::Twist _uaux;
     geometry_msgs::msg::Twist _sigma;
+    geometry_msgs::msg::Twist _gamma;
 
     Eigen::Vector4d zetta1;
     Eigen::Vector4d zetta2;
@@ -422,17 +466,19 @@ class AsmcController : public rclcpp::Node{
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr reference_pose_subscriber; 
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr estimator_velocity_subscriber; 
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr reference_velocity_subscriber;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr wand_pose_subscriber;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr uaux_publisher;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr sigma_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr error_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ref_rot_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr gamma_publisher;
 
 };
 
 int main(int argc, char * argv[]){
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<AsmcController>());
+  rclcpp::spin(std::make_shared<AsmcAvoidanceController>());
   rclcpp::shutdown();
   return 0;
 }
