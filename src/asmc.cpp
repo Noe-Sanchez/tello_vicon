@@ -178,13 +178,13 @@ class AsmcController : public rclcpp::Node{
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
-      zetta1 << 1.75, 1.75, 1.5, 1.5;
-      zetta2 << 1.5, 1.5, 2, 2;
+      zetta1 << 10, 10, 10, 10;
+      zetta2 << 0.01, 0.01, 0.01, 0.2;
       // lambda1 > lambda2
-      lambda1 << 2, 2, 2, 10;
+      lambda1 << 1, 1, 1, 1;
       lambda2 << 1.3, 1.3, 1.3, 1.3;
-      alpha << 0.075, 0.075, 0.1, 0.1;
-      beta << 5, 5, 1, 5;
+      alpha << 0.005, 0.005, 0.005, 0.005;
+      beta << 2, 2, 2, 2;
 
       e << 0, 0, 0, 0;
       ref_rot << 0, 0, 0, 0;
@@ -287,11 +287,12 @@ class AsmcController : public rclcpp::Node{
 	       estimator_velocity.linear.y  - reference_velocity.linear.y,
 	       estimator_velocity.linear.z  - reference_velocity.linear.z,
 	       estimator_velocity.angular.z - reference_velocity.angular.z;*/
-      /*e_dot << estimator_velocity.twist.linear.x  - reference_velocity.twist.linear.x,
+      e_dot << estimator_velocity.twist.linear.x  - reference_velocity.twist.linear.x,
                estimator_velocity.twist.linear.y  - reference_velocity.twist.linear.y,
                estimator_velocity.twist.linear.z  - reference_velocity.twist.linear.z,
-               estimator_velocity.twist.angular.z - reference_velocity.twist.angular.z;*/
-      e_dot << reference_velocity.twist.linear.x,
+               estimator_velocity.twist.angular.z - reference_velocity.twist.angular.z;
+      Eigen::Vector4d xd_dot;
+      xd_dot << reference_velocity.twist.linear.x,
                reference_velocity.twist.linear.y,
                reference_velocity.twist.linear.z,
                reference_velocity.twist.angular.z;
@@ -299,7 +300,8 @@ class AsmcController : public rclcpp::Node{
       //std::cout << "Error_dot: x" << e_dot(0) << " y: " << e_dot(1) << " z: " << e_dot(2) << " psi: " << e_dot(3) << std::endl;
 
       // Sliding surface 
-      sigma << e + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
+      //sigma << e + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
+      sigma << e_dot + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
 
       // Check for NaN in sigma
       for (int i = 0; i < 4; i++){
@@ -338,6 +340,11 @@ class AsmcController : public rclcpp::Node{
       // Control law using ewise
       //uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
       uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      /*uaux << -zetta2(0) * sigma(0) / abs(sigma(0)),
+              -zetta2(1) * sigma(1) / abs(sigma(1)),
+              -zetta2(2) * sigma(2) / abs(sigma(2)),
+              -zetta2(3) * sigma(3) / abs(sigma(3));*/
+              
       
       //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
       
@@ -349,19 +356,39 @@ class AsmcController : public rclcpp::Node{
 
       // Rotate feedforward velocity in x and y
       Eigen::Vector4d v_dotd;
-      v_dotd << 0, e_dot(0), e_dot(1), e_dot(2);
+      //v_dotd << 0, e_dot(0), e_dot(1), e_dot(2);
+      v_dotd << 0, xd_dot(0), xd_dot(1), xd_dot(2);
       v_dotd = kronecker(kronecker(q_hat_conj, v_dotd), q_hat);
 
-      uaux(0) = uaux_rot(1) - v_dotd(1);
-      uaux(1) = uaux_rot(2) - v_dotd(2);
-      uaux(2) = uaux(2)     - v_dotd(3);
+      //uaux(0) = uaux_rot(1) - v_dotd(1);
+      //uaux(1) = uaux_rot(2) - v_dotd(2);
+      //uaux(2) = uaux(2)     - v_dotd(3);
+      //uaux(0) = uaux_rot(1) - v_dotd(1) - ewise(zetta1, sig(e, lambda1))(0);
+      //uaux(1) = uaux_rot(2) - v_dotd(2) - ewise(zetta1, sig(e, lambda1))(1);
+      //uaux(2) = uaux(2)     - v_dotd(3) - ewise(zetta1, sig(e, lambda1))(2);
+      //uaux(3) = uaux(3)     - v_dotd(0) - ewise(zetta1, sig(e, lambda1))(3);
 
+      Eigen::Vector4d u_rot;
+      u_rot << 0,
+               -uaux(0) + xd_dot(0) + ewise(zetta1, sig(e, lambda1))(0),
+               -uaux(1) + xd_dot(1) + ewise(zetta1, sig(e, lambda1))(1),
+               -uaux(2) + xd_dot(2) + ewise(zetta1, sig(e, lambda1))(2);
+      u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
+
+      /*
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
       uaux(1) = std::min(std::max(uaux(1), -1.6), 1.6);
       //uaux(2) = std::min(std::max(uaux(2), -0.9), 1.0);
       uaux(2) = std::min(std::max(uaux(2), -1.0), 1.0);
       uaux(3) = std::min(std::max(uaux(3), -1.0), 1.0);
+      */
+
+      uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
+      uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
+      uaux(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
+      uaux(3) = std::min(std::max(uaux(3), -1.0), 1.0);
+
 
       // Normalize control output
       
@@ -371,10 +398,15 @@ class AsmcController : public rclcpp::Node{
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
 
-      
+      /*
       _uaux.linear.x = -uaux(0);
       _uaux.linear.y = -uaux(1);
       _uaux.linear.z = -uaux(2);
+      _uaux.angular.z = uaux(3);
+      */
+      _uaux.linear.x = uaux(0);
+      _uaux.linear.y = uaux(1);
+      _uaux.linear.z = uaux(2);
       _uaux.angular.z = uaux(3);
 
       _sigma.linear.x = sigma(0);
