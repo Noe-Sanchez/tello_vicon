@@ -10,6 +10,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include <tf2_ros/transform_broadcaster.h>
 
 Eigen::Vector3d sig(Eigen::Vector3d v, double exponent){
   Eigen::Vector3d s;
@@ -77,11 +80,13 @@ class Differentiator : public rclcpp::Node{
 
       // Publishers
       estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);
-      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10);
+      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10);
       estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose_error", 10);
 
       // Make 0.01s timer
       estimator_timer = this->create_wall_timer(10ms, std::bind(&Differentiator::estimator_callback, this));
+      
+      transform_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
       
       // Initialize variables
       Eigen::Vector4d identity;
@@ -201,14 +206,22 @@ class Differentiator : public rclcpp::Node{
       estimated_pose.pose.orientation.y = q_hat(2);
       estimated_pose.pose.orientation.z = q_hat(3);
       estimated_pose.header.stamp = this->now();
-      estimated_pose.header.frame_id = vicon_pose.header.frame_id;
+      estimated_pose.header.frame_id = "world";
 
-      estimated_velocity.linear.x = varsigma2_hat(0); 
-      estimated_velocity.linear.y = varsigma2_hat(1);
-      estimated_velocity.linear.z = varsigma2_hat(2);
-      estimated_velocity.angular.x = w_hat(0);
-      estimated_velocity.angular.y = w_hat(1);
-      estimated_velocity.angular.z = w_hat(2);
+      //estimated_velocity.linear.x = varsigma2_hat(0); 
+      //estimated_velocity.linear.y = varsigma2_hat(1);
+      //estimated_velocity.linear.z = varsigma2_hat(2);
+      //estimated_velocity.angular.x = w_hat(0);
+      //estimated_velocity.angular.y = w_hat(1);
+      //estimated_velocity.angular.z = w_hat(2);
+      estimated_velocity.twist.linear.x = varsigma2_hat(0);
+      estimated_velocity.twist.linear.y = varsigma2_hat(1);
+      estimated_velocity.twist.linear.z = varsigma2_hat(2);
+      estimated_velocity.twist.angular.x = w_hat(0);
+      estimated_velocity.twist.angular.y = w_hat(1);
+      estimated_velocity.twist.angular.z = w_hat(2);
+      estimated_velocity.header.stamp = this->now();
+      estimated_velocity.header.frame_id = "tello";
 
       // Publish estimated pose error
       estimated_pose_error.pose.position.x = varsigma_tilde(0);
@@ -219,12 +232,25 @@ class Differentiator : public rclcpp::Node{
       estimated_pose_error.pose.orientation.y = q_tilde(2);
       estimated_pose_error.pose.orientation.z = q_tilde(3);
       estimated_pose_error.header.stamp = this->now();
-      estimated_pose_error.header.frame_id = vicon_pose.header.frame_id;
+      estimated_pose_error.header.frame_id = "world";
+
+      // Publish estimated transform
+      estimated_transform.header.stamp = this->now();
+      estimated_transform.header.frame_id = "world";
+      estimated_transform.child_frame_id = "tello";
+      estimated_transform.transform.translation.x = varsigma1_hat(0);
+      estimated_transform.transform.translation.y = varsigma1_hat(1);
+      estimated_transform.transform.translation.z = varsigma1_hat(2);
+      estimated_transform.transform.rotation.w = q_hat(0);
+      estimated_transform.transform.rotation.x = q_hat(1);
+      estimated_transform.transform.rotation.y = q_hat(2);
+      estimated_transform.transform.rotation.z = q_hat(3);
 
       // Publish estimated position and velocity
       estimation_position_publisher->publish(estimated_pose);
       estimation_velocity_publisher->publish(estimated_velocity);
       estimation_pose_error_publisher->publish(estimated_pose_error);
+      transform_broadcaster->sendTransform(estimated_transform);
     }
 
   private:
@@ -232,7 +258,8 @@ class Differentiator : public rclcpp::Node{
     geometry_msgs::msg::PoseStamped vicon_pose; 
     geometry_msgs::msg::PoseStamped estimated_pose;
     geometry_msgs::msg::PoseStamped estimated_pose_error;
-    geometry_msgs::msg::Twist estimated_velocity;
+    geometry_msgs::msg::TwistStamped estimated_velocity;
+    geometry_msgs::msg::TransformStamped estimated_transform;
    
     Eigen::Vector4d q_hat;
     Eigen::Vector4d q_hat_dot;
@@ -270,8 +297,9 @@ class Differentiator : public rclcpp::Node{
 
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr estimation_position_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr estimation_pose_error_publisher;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr estimation_velocity_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr estimation_velocity_publisher;
 
+    std::shared_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster;
 };
 
 int main(int argc, char * argv[]){

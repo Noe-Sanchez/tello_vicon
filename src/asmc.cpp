@@ -130,7 +130,9 @@ Eigen::Vector4d qlm(Eigen::Vector4d q){
     } else if (q(0) < -1){
       q(0) = -1;
     }
-    q_log = acos(q(0)) * q_log;
+    double acosaux = acos(q(0)) < acos(-q(0)) ? acos(q(0)) : acos(-q(0));
+    //q_log = acos(q(0)) * q_log;
+    q_log = acosaux * q_log;
   }
 
   return 2*q_log;
@@ -174,17 +176,22 @@ class AsmcController : public rclcpp::Node{
       error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
       ref_rot_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/ref_rot", 10);
 
+      k_publisher     = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/control/k", 10);
+      e_dot_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/control/e_dot", 10);
+
       // Make 0.5s timer
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
-      zetta1 << 10, 10, 10, 10;
+      //zetta1 << 1, 1, 1, 4;
+      zetta1 << 5.45, 5.45, 1.45, 4;
       zetta2 << 0.01, 0.01, 0.01, 0.2;
       // lambda1 > lambda2
-      lambda1 << 1, 1, 1, 1;
+      lambda1 << 1.2, 1.2, 1.2, 1;
       lambda2 << 1.3, 1.3, 1.3, 1.3;
-      alpha << 0.005, 0.005, 0.005, 0.005;
-      beta << 2, 2, 2, 2;
+      //alpha << 0.05, 0.05, 0.05, 0.0001;
+      alpha << 0.005, 0.005, 0.001, 0.0001;
+      beta << 1, 1, 1, 1;
 
       e << 0, 0, 0, 0;
       ref_rot << 0, 0, 0, 0;
@@ -293,9 +300,9 @@ class AsmcController : public rclcpp::Node{
                estimator_velocity.twist.angular.z - reference_velocity.twist.angular.z;
       Eigen::Vector4d xd_dot;
       xd_dot << reference_velocity.twist.linear.x,
-               reference_velocity.twist.linear.y,
-               reference_velocity.twist.linear.z,
-               reference_velocity.twist.angular.z;
+                reference_velocity.twist.linear.y,
+                reference_velocity.twist.linear.z,
+                reference_velocity.twist.angular.z;
 	
       //std::cout << "Error_dot: x" << e_dot(0) << " y: " << e_dot(1) << " z: " << e_dot(2) << " psi: " << e_dot(3) << std::endl;
 
@@ -370,11 +377,12 @@ class AsmcController : public rclcpp::Node{
 
       Eigen::Vector4d u_rot;
       u_rot << 0,
-               -uaux(0) + xd_dot(0) + ewise(zetta1, sig(e, lambda1))(0),
-               -uaux(1) + xd_dot(1) + ewise(zetta1, sig(e, lambda1))(1),
-               -uaux(2) + xd_dot(2) + ewise(zetta1, sig(e, lambda1))(2);
+               -uaux(0) + ewise(zetta1, sig(e, lambda1))(0) + xd_dot(0),
+               -uaux(1) + ewise(zetta1, sig(e, lambda1))(1) + xd_dot(1),
+               -uaux(2) + ewise(zetta1, sig(e, lambda1))(2) + xd_dot(2);
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
 
+      uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta1, sig(e, lambda1))(3);
       /*
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
@@ -387,7 +395,7 @@ class AsmcController : public rclcpp::Node{
       uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
       uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
       uaux(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
-      uaux(3) = std::min(std::max(uaux(3), -1.0), 1.0);
+      uaux(3) = std::min(std::max(uaux(3),  -1.0), 1.0);
 
 
       // Normalize control output
@@ -404,9 +412,9 @@ class AsmcController : public rclcpp::Node{
       _uaux.linear.z = -uaux(2);
       _uaux.angular.z = uaux(3);
       */
-      _uaux.linear.x = uaux(0);
-      _uaux.linear.y = uaux(1);
-      _uaux.linear.z = uaux(2);
+      _uaux.linear.x =  uaux(0);
+      _uaux.linear.y =  uaux(1);
+      _uaux.linear.z =  uaux(2);
       _uaux.angular.z = uaux(3);
 
       _sigma.linear.x = sigma(0);
@@ -432,11 +440,27 @@ class AsmcController : public rclcpp::Node{
       _ref_rot.pose.orientation.z = reference_pose.pose.orientation.z;
       _ref_rot.header.frame_id = "world";
 
+      _k.twist.linear.x  = K(0);
+      _k.twist.linear.y  = K(1);
+      _k.twist.linear.z  = K(2);
+      _k.twist.angular.z = K(3);
+      _k.header.frame_id = "tello";
+      _k.header.stamp = this->now();
+
+      _e_dot.twist.linear.x  = e_dot(0);
+      _e_dot.twist.linear.y  = e_dot(1);
+      _e_dot.twist.linear.z  = e_dot(2);
+      _e_dot.twist.angular.z = e_dot(3);
+      _e_dot.header.frame_id = "tello";
+      _e_dot.header.stamp = this->now();
+
       uaux_publisher->publish(_uaux);
       sigma_publisher->publish(_sigma);
       error_publisher->publish(_error);
       ref_rot_publisher->publish(_ref_rot);
       
+      k_publisher->publish(_k);
+      e_dot_publisher->publish(_e_dot);
     }
 
   private:
@@ -447,6 +471,8 @@ class AsmcController : public rclcpp::Node{
     geometry_msgs::msg::PoseStamped _ref_rot;
     geometry_msgs::msg::TwistStamped estimator_velocity;
     geometry_msgs::msg::TwistStamped reference_velocity;
+    geometry_msgs::msg::TwistStamped _k;
+    geometry_msgs::msg::TwistStamped _e_dot;
     geometry_msgs::msg::Twist _uaux;
     geometry_msgs::msg::Twist _sigma;
 
@@ -479,6 +505,8 @@ class AsmcController : public rclcpp::Node{
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr sigma_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr error_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ref_rot_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr k_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr e_dot_publisher;
 
 };
 

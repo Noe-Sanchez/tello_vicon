@@ -71,6 +71,7 @@ def main(args=None) -> None:
     rclpy.init(args=args)
     tello_wrapper = TelloWrapper()
     rclpy.spin(tello_wrapper)
+    tello_wrapper.tello.send_rc_control(0, 0, 0, 0)
     tello_wrapper.tello.end()
     tello_wrapper.destroy_node()
     print('Ending tello connection')
@@ -80,4 +81,5 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as e:
+        tello_wrapper.tello.send_rc_control(0, 0, 0, 0)
         print(e)
