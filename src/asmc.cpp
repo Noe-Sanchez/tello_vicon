@@ -10,6 +10,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 
 using namespace std::chrono_literals;
 
@@ -161,9 +162,11 @@ class AsmcController : public rclcpp::Node{
       // Subscribers
       estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
       //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
-      estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
+      estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
+      //estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
-      reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
+      reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
+      //reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
 
       // Publishers
       uaux_publisher  = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
@@ -209,13 +212,13 @@ class AsmcController : public rclcpp::Node{
     void estimator_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
       estimator_pose = *msg;
     }
-    void estimator_velocity_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
+    void estimator_velocity_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg){
       estimator_velocity = *msg;
     }
     void position_reference_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
       reference_pose = *msg;
     }
-    void velocity_reference_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
+    void velocity_reference_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg){
       reference_velocity = *msg;
     }
 
@@ -280,10 +283,18 @@ class AsmcController : public rclcpp::Node{
       //std::cout << "Error: x" << e(0) << " y: " << e(1) << " z: " << e(2) << " psi: " << e(3) << std::endl;
       //std::cout << "Ref rot: x" << ref_rot(1) << " y: " << ref_rot(2) << " z: " << ref_rot(3) << std::endl;
 
-      e_dot << estimator_velocity.linear.x  - reference_velocity.linear.x,
+      /*e_dot << estimator_velocity.linear.x  - reference_velocity.linear.x,
 	       estimator_velocity.linear.y  - reference_velocity.linear.y,
 	       estimator_velocity.linear.z  - reference_velocity.linear.z,
-	       estimator_velocity.angular.z - reference_velocity.angular.z;
+	       estimator_velocity.angular.z - reference_velocity.angular.z;*/
+      /*e_dot << estimator_velocity.twist.linear.x  - reference_velocity.twist.linear.x,
+               estimator_velocity.twist.linear.y  - reference_velocity.twist.linear.y,
+               estimator_velocity.twist.linear.z  - reference_velocity.twist.linear.z,
+               estimator_velocity.twist.angular.z - reference_velocity.twist.angular.z;*/
+      e_dot << reference_velocity.twist.linear.x,
+               reference_velocity.twist.linear.y,
+               reference_velocity.twist.linear.z,
+               reference_velocity.twist.angular.z;
 	
       //std::cout << "Error_dot: x" << e_dot(0) << " y: " << e_dot(1) << " z: " << e_dot(2) << " psi: " << e_dot(3) << std::endl;
 
@@ -298,6 +309,7 @@ class AsmcController : public rclcpp::Node{
 	      }
       }
 
+      //K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
       K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
 
       //std::cout << "Sigma: x" << sigma(0) << " y: " << sigma(1) << " z: " << sigma(2) << " psi: " << sigma(3) << std::endl;
@@ -335,20 +347,28 @@ class AsmcController : public rclcpp::Node{
       uaux_rot = kronecker(kronecker(q_hat_conj, uaux_rot), q_hat);
       //uaux_rot = kronecker(kronecker(q_hat, uaux_rot), q_hat_conj);     
 
-      uaux(0) = uaux_rot(1);
-      uaux(1) = uaux_rot(2);
+      // Rotate feedforward velocity in x and y
+      Eigen::Vector4d v_dotd;
+      v_dotd << 0, e_dot(0), e_dot(1), e_dot(2);
+      v_dotd = kronecker(kronecker(q_hat_conj, v_dotd), q_hat);
+
+      uaux(0) = uaux_rot(1) - v_dotd(1);
+      uaux(1) = uaux_rot(2) - v_dotd(2);
+      uaux(2) = uaux(2)     - v_dotd(3);
 
       // Saturate control output
       uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
       uaux(1) = std::min(std::max(uaux(1), -1.6), 1.6);
-      uaux(2) = std::min(std::max(uaux(2), -0.9), 1.0);
+      //uaux(2) = std::min(std::max(uaux(2), -0.9), 1.0);
+      uaux(2) = std::min(std::max(uaux(2), -1.0), 1.0);
       uaux(3) = std::min(std::max(uaux(3), -1.0), 1.0);
 
       // Normalize control output
       
       uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
       uaux(1) = 100 * (uaux(1) + 1.6)/(3.2) - 50;
-      uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
+      //uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
+      uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
 
       
@@ -393,8 +413,8 @@ class AsmcController : public rclcpp::Node{
     geometry_msgs::msg::PoseStamped reference_pose;
     geometry_msgs::msg::PoseStamped _error;
     geometry_msgs::msg::PoseStamped _ref_rot;
-    geometry_msgs::msg::Twist estimator_velocity;
-    geometry_msgs::msg::Twist reference_velocity;
+    geometry_msgs::msg::TwistStamped estimator_velocity;
+    geometry_msgs::msg::TwistStamped reference_velocity;
     geometry_msgs::msg::Twist _uaux;
     geometry_msgs::msg::Twist _sigma;
 
@@ -420,8 +440,8 @@ class AsmcController : public rclcpp::Node{
     rclcpp::TimerBase::SharedPtr control_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr estimator_pose_subscriber;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr reference_pose_subscriber; 
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr estimator_velocity_subscriber; 
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr reference_velocity_subscriber;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr estimator_velocity_subscriber; 
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr reference_velocity_subscriber;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr uaux_publisher;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr sigma_publisher;
