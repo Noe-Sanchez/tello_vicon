@@ -163,17 +163,14 @@ class AsmcController : public rclcpp::Node{
     AsmcController(): Node("asmc_node"){
       // Subscribers
       estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
-      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
       estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
-      //estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
       reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
-      //reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::Twist>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
 
       // Publishers
-      uaux_publisher  = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
-      sigma_publisher = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/sigma", 10);
-      error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
+      uaux_publisher    = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
+      sigma_publisher   = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/sigma", 10);
+      error_publisher   = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
       ref_rot_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/ref_rot", 10);
 
       k_publisher     = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/control/k", 10);
@@ -183,28 +180,26 @@ class AsmcController : public rclcpp::Node{
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
-      //zetta1 << 1, 1, 1, 4;
-      zetta1 << 3.45, 3.45, 4.25, 4;
-      zetta2 << 0.01, 0.01, 0.01, 0.2;
-      // lambda1 > lambda2
-      lambda1 << 1.2, 1.2, 1.2, 1;
-      lambda2 << 1.3, 1.3, 1.3, 1.3;
-      //alpha << 0.05, 0.05, 0.05, 0.0001;
-      alpha << 0.001, 0.001, 0.001, 0.0001;
-      beta << 1, 1, 1, 1;
+      //zetta << 1, 1, 1, 4;
+      zetta << 5.45, 5.45, 4.25, 4;
+      lambda << 1.2, 1.2, 1.2, 1;
+      alpha << 0.001, 0.001, 0.001, 0.001;
+      beta << 0.01, 0.01, 0.01, 0.01;
 
-      e << 0, 0, 0, 0;
-      ref_rot << 0, 0, 0, 0;
-      e_dot << 0, 0, 0, 0;
-      q_hat << 1, 0, 0, 0;
+      lambda_minus_1 << lambda(0)-1, lambda(1)-1, lambda(2)-1, lambda(3)-1;
+
+      e          << 0, 0, 0, 0;
+      ref_rot    << 0, 0, 0, 0;
+      e_dot      << 0, 0, 0, 0;
+      q_hat      << 1, 0, 0, 0;
       q_hat_conj << 1, 0, 0, 0;
-      q_d << 1, 0, 0, 0;
-      q_e << 1, 0, 0, 0;
-      eta_e << 0, 0, 0, 0;
-      K << 0, 0, 0, 0;
-      K_dot << 0, 0, 0, 0;
-      sigma << 0, 0, 0, 0;
-      uaux << 0, 0, 0, 0;
+      q_d        << 1, 0, 0, 0;
+      q_e        << 1, 0, 0, 0;
+      eta_e      << 0, 0, 0, 0;
+      K          << 0, 0, 0, 0;
+      K_dot      << 0, 0, 0, 0;
+      sigma      << 0, 0, 0, 0;
+      uaux       << 0, 0, 0, 0;
 
       reference_pose.pose.position.x = 0;
       reference_pose.pose.position.y = 0;
@@ -246,8 +241,7 @@ class AsmcController : public rclcpp::Node{
 	q_e << 1, 0, 0, 0;
       }
 
-      // Logarithmic mapping of q_e (0, eta_e_phi, eta_e_theta, eta_e_psi)
-      std ::cout << "q_e: w" << q_e(0) << " x: " << q_e(1) << " y: " << q_e(2) << " z: " << q_e(3) << std::endl;
+      // Logarithmic mapping of q_e
       eta_e << qlm(q_e);
 
       // Check for NaN in eta_e
@@ -258,139 +252,61 @@ class AsmcController : public rclcpp::Node{
         }
       }
 
-
-      // Error definition
-      //ref_rot << 0, reference_pose.pose.position.x, reference_pose.pose.position.y, reference_pose.pose.position.z;
-      //ref_rot << kronecker(q_hat, kronecker(ref_rot, q_hat_conj));
-      //ref_rot << kronecker(kronecker(q_hat, ref_rot), q_hat_conj);
-      //ref_rot << ref_rot(0),
-      //ref_rot(1) + estimator_pose.pose.position.x,
-      //ref_rot(2) + estimator_pose.pose.position.y,
-      //ref_rot(3);
-
-      //std::cout << "Ref x: " << reference_pose.pose.position.x << " y: " << reference_pose.pose.position.y << " z: " << reference_pose.pose.position.z << std::endl;
-      //std::cout << "Ref rot: x" << ref_rot(1) << " y: " << ref_rot(2) << " z: " << ref_rot(3) << std::endl;
-
-      //e << ref_rot(1) - estimator_pose.pose.position.x, 
-      //     ref_rot(2) - estimator_pose.pose.position.y,
-      //     ref_rot(3) - estimator_pose.pose.position.z,
-      //     eta_e(3);
-       
-      //e << ref_rot(1),
-      //     ref_rot(2),
-      //     ref_rot(3), 
-      //     eta_e(3);
-
       e << reference_pose.pose.position.x - estimator_pose.pose.position.x,
            reference_pose.pose.position.y - estimator_pose.pose.position.y,
            reference_pose.pose.position.z - estimator_pose.pose.position.z,
-           //1-estimator_pose.pose.position.z,
-	         eta_e(3);
+	   eta_e(3);
       
-      //std::cout << "Error: x" << e(0) << " y: " << e(1) << " z: " << e(2) << " psi: " << e(3) << std::endl;
-      //std::cout << "Ref rot: x" << ref_rot(1) << " y: " << ref_rot(2) << " z: " << ref_rot(3) << std::endl;
-
-      /*e_dot << estimator_velocity.linear.x  - reference_velocity.linear.x,
-	       estimator_velocity.linear.y  - reference_velocity.linear.y,
-	       estimator_velocity.linear.z  - reference_velocity.linear.z,
-	       estimator_velocity.angular.z - reference_velocity.angular.z;*/
-      e_dot << estimator_velocity.twist.linear.x  - reference_velocity.twist.linear.x,
-               estimator_velocity.twist.linear.y  - reference_velocity.twist.linear.y,
-               estimator_velocity.twist.linear.z  - reference_velocity.twist.linear.z,
-               estimator_velocity.twist.angular.z - reference_velocity.twist.angular.z;
+      e_dot << reference_velocity.twist.linear.x  - estimator_velocity.twist.linear.x,
+	       reference_velocity.twist.linear.y  - estimator_velocity.twist.linear.y,
+	       reference_velocity.twist.linear.z  - estimator_velocity.twist.linear.z,
+	       reference_velocity.twist.angular.z - estimator_velocity.twist.angular.z;
       Eigen::Vector4d xd_dot;
       xd_dot << reference_velocity.twist.linear.x,
                 reference_velocity.twist.linear.y,
                 reference_velocity.twist.linear.z,
                 reference_velocity.twist.angular.z;
-	
-      //std::cout << "Error_dot: x" << e_dot(0) << " y: " << e_dot(1) << " z: " << e_dot(2) << " psi: " << e_dot(3) << std::endl;
 
       // Sliding surface 
-      //sigma << e + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
-      sigma << e_dot + ewise(zetta1, sig(e, lambda1)); //+ ewise(zetta2, sig(e_dot, lambda2));
+      sigma << e + ewise(zetta, sig(e, lambda)); 
 
-      // Check for NaN in sigma
+      // Check for NaN in sigma. Old check, not needed anymore, kept for security
       for (int i = 0; i < 4; i++){
-	      if (std::isnan(sigma(i))){
-          std::cout << "Sigma is NaN at element " << i << std::endl;
-	        sigma(i) = 0;
-	      }
+	if (std::isnan(sigma(i))){
+	  std::cout << "Sigma is NaN at element " << i << std::endl;
+	  sigma(i) = 0;
+	}
       }
 
-      //K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
+      // K dynamics
       K_dot << ewise(exp4(alpha, 0.5), exp4(sigma.cwiseAbs(), 0.5)) - ewise(exp4(beta, 0.5), exp4(K, 2));
-
-      //std::cout << "Sigma: x" << sigma(0) << " y: " << sigma(1) << " z: " << sigma(2) << " psi: " << sigma(3) << std::endl;
-      //std::cout << "Sigma_abs: x" << sigma.cwiseAbs()(0) << " y: " << sigma.cwiseAbs()(1) << " z: " << sigma.cwiseAbs()(2) << " psi: " << sigma.cwiseAbs()(3) << std::endl;
-      //std::cout << "K_dot: x" << K_dot(0) << " y: " << K_dot(1) << " z: " << K_dot(2) << " psi: " << K_dot(3) << std::endl;
-      //std::cout << "K: x" << K(0) << " y: " << K(1) << " z: " << K(2) << " psi: " << K(3) << std::endl;
-
-      //sigma << e + ewise(zetta1, sig4(e, lambda1)) + ewise(zetta2, sig4(e_dot, lambda2));
-      //K_dot << ewise(alpha.pow(0.5), sigma.cwiseAbs().pow(0.5)) + ewise(beta.pow(0.5), K.pow(2));
 
       // Euler integrate K_dot to get K
       K += K_dot * 0.01;
 
-      // Saturate K
-      /*for (int i = 0; i < 4; i++){
-	      if (K(i) > 10){
-	        K(i) = 10;
-	      } else if (K(i) < -10){
-	        K(i) = -10;
-	      }
-      }*/
 
-      // Control law
-      //uaux << -2 * K * sig4(sigma, 0.5) - exp4(K, 2) * sigma * 0.5;
-
-      // Control law using ewise
-      //uaux << -2 * ewise(K, sig4(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5;
+      // Control law 
+      //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5; //Original
       uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
-      /*uaux << -zetta2(0) * sigma(0) / abs(sigma(0)),
-              -zetta2(1) * sigma(1) / abs(sigma(1)),
-              -zetta2(2) * sigma(2) / abs(sigma(2)),
-              -zetta2(3) * sigma(3) / abs(sigma(3));*/
               
+      // Original feedback linearization
+      /*u_rot << 0,
+               -uaux(0) + ewise(zetta, sig(e, lambda))(0) + xd_dot(0),
+               -uaux(1) + ewise(zetta, sig(e, lambda))(1) + xd_dot(1),
+               -uaux(2) + ewise(zetta, sig(e, lambda))(2) + xd_dot(2);*/
       
-      //std::cout << "Control: x" << uaux(0) << " y: " << uaux(1) << " z: " << uaux(2) << " psi: " << uaux(3) << std::endl;
-      
-      // Rotate control output in x and y
-      Eigen::Vector4d uaux_rot;
-      uaux_rot << 0, uaux(0), uaux(1), 0;
-      uaux_rot = kronecker(kronecker(q_hat_conj, uaux_rot), q_hat);
-      //uaux_rot = kronecker(kronecker(q_hat, uaux_rot), q_hat_conj);     
-
-      // Rotate feedforward velocity in x and y
-      Eigen::Vector4d v_dotd;
-      //v_dotd << 0, e_dot(0), e_dot(1), e_dot(2);
-      v_dotd << 0, xd_dot(0), xd_dot(1), xd_dot(2);
-      v_dotd = kronecker(kronecker(q_hat_conj, v_dotd), q_hat);
-
-      //uaux(0) = uaux_rot(1) - v_dotd(1);
-      //uaux(1) = uaux_rot(2) - v_dotd(2);
-      //uaux(2) = uaux(2)     - v_dotd(3);
-      //uaux(0) = uaux_rot(1) - v_dotd(1) - ewise(zetta1, sig(e, lambda1))(0);
-      //uaux(1) = uaux_rot(2) - v_dotd(2) - ewise(zetta1, sig(e, lambda1))(1);
-      //uaux(2) = uaux(2)     - v_dotd(3) - ewise(zetta1, sig(e, lambda1))(2);
-      //uaux(3) = uaux(3)     - v_dotd(0) - ewise(zetta1, sig(e, lambda1))(3);
-
-      Eigen::Vector4d u_rot;
+      // New feedback linearization, lyapunov based
+      term1 << 1 + zetta(0) * lambda(0) * pow(abs(e(0)), lambda_minus_1(0)),
+	       1 + zetta(1) * lambda(1) * pow(abs(e(1)), lambda_minus_1(1)), 
+	       1 + zetta(2) * lambda(2) * pow(abs(e(2)), lambda_minus_1(2)),
+	       1 + zetta(3) * lambda(3) * pow(abs(e(3)), lambda_minus_1(3));
       u_rot << 0,
-               -uaux(0) + ewise(zetta1, sig(e, lambda1))(0) + xd_dot(0),
-               -uaux(1) + ewise(zetta1, sig(e, lambda1))(1) + xd_dot(1),
-               -uaux(2) + ewise(zetta1, sig(e, lambda1))(2) + xd_dot(2);
+               xd_dot(0) -uaux(0)/term1(0),
+	       xd_dot(1) -uaux(1)/term1(1),
+	       xd_dot(2) -uaux(2)/term1(2);
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
 
-      uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta1, sig(e, lambda1))(3);
-      /*
-      // Saturate control output
-      uaux(0) = std::min(std::max(uaux(0), -1.6), 1.6);
-      uaux(1) = std::min(std::max(uaux(1), -1.6), 1.6);
-      //uaux(2) = std::min(std::max(uaux(2), -0.9), 1.0);
-      uaux(2) = std::min(std::max(uaux(2), -1.0), 1.0);
-      uaux(3) = std::min(std::max(uaux(3), -1.0), 1.0);
-      */
+      uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
 
       uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
       uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
@@ -406,12 +322,6 @@ class AsmcController : public rclcpp::Node{
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
 
-      /*
-      _uaux.linear.x = -uaux(0);
-      _uaux.linear.y = -uaux(1);
-      _uaux.linear.z = -uaux(2);
-      _uaux.angular.z = uaux(3);
-      */
       _uaux.linear.x =  uaux(0);
       _uaux.linear.y =  uaux(1);
       _uaux.linear.z =  uaux(2);
@@ -427,9 +337,9 @@ class AsmcController : public rclcpp::Node{
       _error.pose.position.z = e(2);
       _error.pose.orientation.w = e(3);
 
-      _ref_rot.pose.position.x = uaux_rot(1);
-      _ref_rot.pose.position.y = uaux_rot(2);
-      _ref_rot.pose.position.z = uaux_rot(3);
+      _ref_rot.pose.position.x = u_rot(1);
+      _ref_rot.pose.position.y = u_rot(2);
+      _ref_rot.pose.position.z = u_rot(3);
       //_ref_rot.pose.position.x = K(0);
       //_ref_rot.pose.position.y = K(1);
       //_ref_rot.pose.position.z = K(2);
@@ -476,10 +386,10 @@ class AsmcController : public rclcpp::Node{
     geometry_msgs::msg::Twist _uaux;
     geometry_msgs::msg::Twist _sigma;
 
-    Eigen::Vector4d zetta1;
-    Eigen::Vector4d zetta2;
-    Eigen::Vector4d lambda1;
-    Eigen::Vector4d lambda2;
+    Eigen::Vector4d zetta;
+    Eigen::Vector4d lambda;
+    Eigen::Vector4d lambda_minus_1;
+    Eigen::Vector4d term1;
     Eigen::Vector4d e;
     Eigen::Vector4d ref_rot;
     Eigen::Vector4d e_dot;
@@ -494,6 +404,7 @@ class AsmcController : public rclcpp::Node{
     Eigen::Vector4d beta;
     Eigen::Vector4d sigma;
     Eigen::Vector4d uaux;
+    Eigen::Vector4d u_rot;
 
     rclcpp::TimerBase::SharedPtr control_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr estimator_pose_subscriber;
