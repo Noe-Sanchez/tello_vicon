@@ -24,7 +24,7 @@ endif()
 add_executable(asmc_node src/asmc.cpp)
 ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
 add_executable(differentiator_node src/differentiator.cpp)
-ament_target_dependencies(differentiator_node rclcpp std_msgs geometry_msgs)
+ament_target_dependencies(differentiator_node rclcpp std_msgs geometry_msgs tf2_ros)
 add_executable(pid_node src/pid.cpp)
 ament_target_dependencies(pid_node rclcpp std_msgs geometry_msgs)
 add_executable(pid2_node src/pid2.cpp)
@@ -46,6 +46,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   tello_vicon/tello_wrapper.py
   tello_vicon/reference.py
+  tello_vicon/multi_reference.py
   tello_vicon/tello_joy.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -62,5 +63,7 @@ install(TARGETS
   unity_ui_node
   DESTINATION lib/${PROJECT_NAME}
 )
+
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 ament_package()
