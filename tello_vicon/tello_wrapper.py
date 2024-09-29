@@ -4,20 +4,24 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Point, Twist
 from std_msgs.msg import String, Int32
 import time
+import sys
 from djitellopy import Tello
 
 class TelloWrapper(Node):
   def __init__(self) -> None:
     super().__init__('tello_wrapper')
 
+    namespace = sys.argv[-1]
+    print("Namespace: ", namespace)
     # Create subscribers
-    self.control_subscriber = self.create_subscription(Twist, "/tello/control/uaux", self.control_input_callback, 10)
-    self.enable_susbcriber = self.create_subscription(String, "/tello/enable", self.enable_callback, 10)
+    self.control_subscriber = self.create_subscription(Twist, namespace + "/tello/control/uaux", self.control_input_callback, 10)
+    self.enable_susbcriber = self.create_subscription(String, namespace + "/tello/enable", self.enable_callback, 10)
 
-    self.battery_publisher = self.create_publisher(Int32, "/tello/battery", 10)
+    self.battery_publisher = self.create_publisher(Int32, namespace + "/tello/battery", 10)
 
     # Initialize variables
-    self.enable = False
+    #self.enable = False
+    self.enable = True 
     self.battery = Int32()
     self.control_input = Twist()
 
@@ -30,6 +34,9 @@ class TelloWrapper(Node):
     self.tello = Tello("10.15.232.94", 8889)
     self.tello.connect()
     self.tello.set_speed(100)
+    #self.tello.turn_motor_on()
+    #time.sleep(5)
+    #self.tello.turn_motor_off()
     #self.tello.end()
     #self.tello = Tello("192.168.0.148", 8889)
     #self.tello.connect()

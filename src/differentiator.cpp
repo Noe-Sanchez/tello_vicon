@@ -126,6 +126,9 @@ class Differentiator : public rclcpp::Node{
       std::cout << "varsigma2_hat_dot: " << varsigma2_hat_dot << std::endl;
       std::cout << "lin_vicon: " << lin_vicon << std::endl;
 
+      // Get drone_id parameter
+      this->declare_parameter("drone_id", 0);
+      drone_id = this->get_parameter("drone_id").as_int();
     }
 
     void vicon_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
@@ -237,7 +240,7 @@ class Differentiator : public rclcpp::Node{
       // Publish estimated transform
       estimated_transform.header.stamp = this->now();
       estimated_transform.header.frame_id = "world";
-      estimated_transform.child_frame_id = "tello";
+      estimated_transform.child_frame_id = "tello" + std::to_string(drone_id);
       estimated_transform.transform.translation.x = varsigma1_hat(0);
       estimated_transform.transform.translation.y = varsigma1_hat(1);
       estimated_transform.transform.translation.z = varsigma1_hat(2);
@@ -291,6 +294,7 @@ class Differentiator : public rclcpp::Node{
     double G2 = 6;
     double Q1 = 5;
     double Q2 = 6;
+    int drone_id;
 
     rclcpp::TimerBase::SharedPtr estimator_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vicon_subscriber;

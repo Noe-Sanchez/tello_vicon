@@ -179,11 +179,16 @@ class SimpleDynamics : public rclcpp::Node{
       // Make 0.5s timer
       dynamics_timer = this->create_wall_timer(10ms, std::bind(&SimpleDynamics::dynamics_callback, this));
   
+      // Get drone id from launchfile parameter
+      this->declare_parameter("drone_id", 0);
+      this->get_parameter("drone_id", drone_id);
+
       // Initialize variables 
       q     << 1, 0, 0, 0;
       q_dot << 0, 0, 0, 0;
-      p     << 0, 0, 1;
+      p     << drone_id, 0, 1;
       p_dot << 0, 0, 0;
+
     }
 
     void reset_state_callback(const std_msgs::msg::Bool::SharedPtr msg){
@@ -233,7 +238,8 @@ class SimpleDynamics : public rclcpp::Node{
 
       transform.header.frame_id = "world";
       transform.header.stamp = this->now();
-      transform.child_frame_id = "tello";
+      //transform.child_frame_id = "tello";
+      transform.child_frame_id = "tello" + std::to_string(drone_id);
       transform.transform.translation.x = p(0);
       transform.transform.translation.y = p(1);
       transform.transform.translation.z = p(2);
@@ -242,7 +248,8 @@ class SimpleDynamics : public rclcpp::Node{
       transform.transform.rotation.y = q(2);
       transform.transform.rotation.z = q(3);
 
-      pose_dot.header.frame_id = "tello";
+      //pose_dot.header.frame_id = "tello";
+      pose_dot.header.frame_id = "tello" + std::to_string(drone_id);
       pose_dot.header.stamp = this->now();
       pose_dot.twist.linear.x = p_dot(0);
       pose_dot.twist.linear.y = p_dot(1);
@@ -275,6 +282,8 @@ class SimpleDynamics : public rclcpp::Node{
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr estimator_velocity_publisher;
 
     std::shared_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster;
+
+    int drone_id;
 };
 
 int main(int argc, char * argv[]){

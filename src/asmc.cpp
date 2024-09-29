@@ -28,7 +28,7 @@ double sig(double x, double exponent){
   s = pow(abs(x), exponent) * s;
 
   return s;
-} 
+}
 
 template <typename VectorType>
 VectorType sig(VectorType v, double exponent){
@@ -82,19 +82,13 @@ Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector4d p){
   Eigen::Matrix4d q_matrix;
   Eigen::Vector4d p_vector;
 
-  /*q_matrix << q.w(), -q.x(), -q.y(), -q.z(),
-	      q.x(), q.w(), -q.z(), q.y(),
-	      q.y(), q.z(), q.w(), -q.x(),
-	      q.z(), -q.y(), q.x(), q.w();
-  */
-
   q_matrix << q(0), -q(1), -q(2), -q(3),
-	            q(1),  q(0), -q(3),  q(2),
-	            q(2),  q(3),  q(0), -q(1),
-	            q(3), -q(2),  q(1),  q(0);
-	      
+              q(1),  q(0), -q(3),  q(2),
+	      q(2),  q(3),  q(0), -q(1),
+	      q(3), -q(2),  q(1),  q(0);
+
   p_vector = q_matrix * p;
-  
+
   return p_vector;
 }
 
@@ -161,8 +155,13 @@ Eigen::Vector4d sqrt4(Eigen::Vector4d v){
 class AsmcController : public rclcpp::Node{
   public:
     AsmcController(): Node("asmc_node"){
+      // Get drone_id parameter
+      this->declare_parameter("drone_id", 0);
+      drone_id = this->get_parameter("drone_id").as_int();
+      
       // Subscribers
-      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
+      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
+      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount" + std::to_string(drone_id+1) + "/TelloMount" + std::to_string(drone_id+1), 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
       estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
       reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
@@ -181,10 +180,16 @@ class AsmcController : public rclcpp::Node{
   
       // Initialize variables 
       //zetta << 1, 1, 1, 4;
-      zetta << 5.45, 5.45, 4.25, 4;
-      lambda << 1.2, 1.2, 1.2, 1;
+      zetta << 3.45, 3.45, 4.25, 4;
+      lambda << 1.1, 1.1, 1.2, 1;
       alpha << 0.001, 0.001, 0.001, 0.001;
       beta << 0.01, 0.01, 0.01, 0.01;
+
+      this->declare_parameter("gains", std::vector<double>{
+	  zetta(0),  zetta(1),  zetta(2),  zetta(3), 
+	  lambda(0), lambda(1), lambda(2), lambda(3), 
+	  alpha(0),  alpha(1),  alpha(2),  alpha(3), 
+	  beta(0),   beta(1),   beta(2),   beta(3)});
 
       lambda_minus_1 << lambda(0)-1, lambda(1)-1, lambda(2)-1, lambda(3)-1;
 
@@ -201,7 +206,7 @@ class AsmcController : public rclcpp::Node{
       sigma      << 0, 0, 0, 0;
       uaux       << 0, 0, 0, 0;
 
-      reference_pose.pose.position.x = 0;
+      reference_pose.pose.position.x = (double)drone_id; 
       reference_pose.pose.position.y = 0;
       reference_pose.pose.position.z = 1;
       reference_pose.pose.orientation.w = 1;
@@ -226,6 +231,12 @@ class AsmcController : public rclcpp::Node{
 
 
     void control_callback(){
+      gains = this->get_parameter("gains").as_double_array();
+      zetta  << gains[0], gains[1], gains[2], gains[3];
+      lambda << gains[4], gains[5], gains[6], gains[7];
+      alpha  << gains[8], gains[9], gains[10], gains[11];
+      beta   << gains[12], gains[13], gains[14], gains[15];
+
       // Conjugate q_hat
       q_hat << estimator_pose.pose.orientation.w, estimator_pose.pose.orientation.x, estimator_pose.pose.orientation.y, estimator_pose.pose.orientation.z;
       q_hat_conj << q_hat(0), -q_hat(1), -q_hat(2), -q_hat(3);
@@ -300,13 +311,19 @@ class AsmcController : public rclcpp::Node{
 	       1 + zetta(1) * lambda(1) * pow(abs(e(1)), lambda_minus_1(1)), 
 	       1 + zetta(2) * lambda(2) * pow(abs(e(2)), lambda_minus_1(2)),
 	       1 + zetta(3) * lambda(3) * pow(abs(e(3)), lambda_minus_1(3));
-      u_rot << 0,
+      /*u_rot << 0,
                xd_dot(0) -uaux(0)/term1(0),
 	       xd_dot(1) -uaux(1)/term1(1),
-	       xd_dot(2) -uaux(2)/term1(2);
+	       xd_dot(2) -uaux(2)/term1(2);*/
+      u_rot << 0,
+               xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
+	       xd_dot(1) - ewise(ewise(zetta, lambda), uaux)(1)/term1(1),
+	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
 
-      uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
+      //uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
+      //uaux(3) = xd_dot(3) - uaux(3) / term1(3);
+      uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
 
       uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
       uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
@@ -405,6 +422,10 @@ class AsmcController : public rclcpp::Node{
     Eigen::Vector4d sigma;
     Eigen::Vector4d uaux;
     Eigen::Vector4d u_rot;
+
+    int drone_id;
+
+    std::vector<double> gains;
 
     rclcpp::TimerBase::SharedPtr control_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr estimator_pose_subscriber;
