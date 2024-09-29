@@ -160,8 +160,8 @@ class AsmcController : public rclcpp::Node{
       drone_id = this->get_parameter("drone_id").as_int();
       
       // Subscribers
-      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
-      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount" + std::to_string(drone_id+1) + "/TelloMount" + std::to_string(drone_id+1), 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
+      estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
+      //estimator_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount" + std::to_string(drone_id+1) + "/TelloMount" + std::to_string(drone_id+1), 10, std::bind(&AsmcController::estimator_pose_callback, this, std::placeholders::_1));
       estimator_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10, std::bind(&AsmcController::estimator_velocity_callback, this, std::placeholders::_1));
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
       reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
