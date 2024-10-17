@@ -40,6 +40,8 @@ ament_target_dependencies(simple_dynamics_node rclcpp std_msgs geometry_msgs tf2
 
 add_executable(test_node src/test.cpp)
 ament_target_dependencies(test_node rclcpp std_msgs geometry_msgs)
+add_executable(vectorfviz_node src/vectorf_visualization.cpp)
+ament_target_dependencies(vectorfviz_node rclcpp std_msgs geometry_msgs visualization_msgs)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -61,6 +63,7 @@ install(TARGETS
   formations_node
   test_node
   unity_ui_node
+  vectorfviz_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
