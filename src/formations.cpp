@@ -12,7 +12,9 @@
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
+#include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/buffer.h>
 
 using namespace std::chrono_literals;
 
@@ -26,10 +28,6 @@ class FormationsHandler : public rclcpp::Node{
 
       transform_timer = this->create_wall_timer(1ms, std::bind(&FormationsHandler::transform_timer_callback, this));
 
-      this->declare_parameter("num_followers", 3);
-
-      std::cout << "Broadcasting configurations" << std::endl;
-
       // Initial formation
       centroid.pose.position.x = 0;
       centroid.pose.position.y = 0;
@@ -39,16 +37,20 @@ class FormationsHandler : public rclcpp::Node{
       centroid.pose.orientation.z = 0;
       centroid.pose.orientation.w = 1;
 
-      int num_followers = this->get_parameter("num_followers").as_int();
+      this->declare_parameter("num_drones", 3);
+      int num_drones = this->get_parameter("num_drones").as_int();
+      std::cout << "Broadcasting configurations for " << num_drones << " followers" << std::endl;
 
-      for (int i = 0; i < num_followers; i++){ 
+      for (int i = 0; i < num_drones; i++){ 
+	individual_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("tello_" + std::to_string(i) + "/tello/reference/pose", 10));
         geometry_msgs::msg::Pose pose;
-        if (num_followers % 2 != 0){
-          pose.position.x = cos(((2 * M_PI * i) / num_followers) + (M_PI / (2 * num_followers)));
-          pose.position.y = sin(((2 * M_PI * i) / num_followers) + (M_PI / (2 * num_followers)));
+        geometry_msgs::msg::PoseStamped pose_stamped;
+        if (num_drones % 2 != 0){
+          pose.position.x = cos(((2 * M_PI * i) / num_drones) + (M_PI / (2 * num_drones)));
+          pose.position.y = sin(((2 * M_PI * i) / num_drones) + (M_PI / (2 * num_drones)));
         } else {
-          pose.position.x = cos(((2 * M_PI * i) / num_followers) + (M_PI / num_followers)); 
-          pose.position.y = sin(((2 * M_PI * i) / num_followers) + (M_PI / num_followers));
+          pose.position.x = cos(((2 * M_PI * i) / num_drones) + (M_PI / num_drones)); 
+          pose.position.y = sin(((2 * M_PI * i) / num_drones) + (M_PI / num_drones));
         }
         pose.position.z = 0;
         pose.orientation.x = 0;
@@ -56,7 +58,12 @@ class FormationsHandler : public rclcpp::Node{
         pose.orientation.z = 0;
         pose.orientation.w = 1;
         formation_definition.poses.push_back(pose);
+	pose_stamped.pose = pose;
+	individual_publishers[i]->publish(pose_stamped);
       }
+      tf_buffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+      this->transform_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+      std::cout << "Broadcast started" << std::endl;
 
     }
     
@@ -73,7 +80,8 @@ class FormationsHandler : public rclcpp::Node{
       transform_broadcaster->sendTransform(centroid_transform);
 
       // Broadcast formation
-      for (int i = 0; i < (int)formation_definition.poses.size(); i++){
+      //for (int i = 0; i < (int)formation_definition.poses.size(); i++){
+      for (int i = 0; i < this->get_parameter("num_drones").as_int(); i++){ 
         geometry_msgs::msg::TransformStamped formation_transform;
         formation_transform.header.stamp = this->now();
         formation_transform.header.frame_id = "centroid";
@@ -83,6 +91,23 @@ class FormationsHandler : public rclcpp::Node{
         formation_transform.transform.translation.z = formation_definition.poses[i].position.z;
         formation_transform.transform.rotation = formation_definition.poses[i].orientation;
         transform_broadcaster->sendTransform(formation_transform);
+        try{
+	  formation_transform = tf_buffer->lookupTransform("world", "follower_" + std::to_string(i), rclcpp::Time(0)); 
+	} catch (tf2::TransformException &ex){
+	  std::cout << "Could not find transform for follower " << i << std::endl;
+	  continue;
+	}
+	//follower.pose = formation_definition.poses[i];
+	follower.pose.position.x = formation_transform.transform.translation.x;
+	follower.pose.position.y = formation_transform.transform.translation.y;
+	follower.pose.position.z = formation_transform.transform.translation.z;
+	follower.pose.orientation = formation_transform.transform.rotation;
+	follower.pose.orientation.x = formation_transform.transform.rotation.x;
+	follower.pose.orientation.y = formation_transform.transform.rotation.y;
+	follower.pose.orientation.z = formation_transform.transform.rotation.z;
+	follower.pose.orientation.w = formation_transform.transform.rotation.w;
+	std::cout << "Broadcasting follower " << i << std::endl;
+	individual_publishers[i]->publish(follower);
       }
     }
 
@@ -98,13 +123,18 @@ class FormationsHandler : public rclcpp::Node{
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr formation_definition_subscriber;
     
     std::shared_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster;
+    std::shared_ptr<tf2_ros::TransformListener> transform_listener;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer;
 
     rclcpp::TimerBase::SharedPtr transform_timer;
 
     // First transform is the centroid, rest are the formation
     std::vector<geometry_msgs::msg::TransformStamped> formation;
     geometry_msgs::msg::PoseStamped centroid;
+    geometry_msgs::msg::PoseStamped follower;
     geometry_msgs::msg::PoseArray formation_definition;
+
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr> individual_publishers;
 
 };
 
