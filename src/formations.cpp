@@ -37,20 +37,20 @@ class FormationsHandler : public rclcpp::Node{
       centroid.pose.orientation.z = 0;
       centroid.pose.orientation.w = 1;
 
-      this->declare_parameter("num_followers", 3);
-      int num_followers = this->get_parameter("num_followers").as_int();
-      std::cout << "Broadcasting configurations for " << num_followers << " followers" << std::endl;
+      this->declare_parameter("num_drones", 3);
+      int num_drones = this->get_parameter("num_drones").as_int();
+      std::cout << "Broadcasting configurations for " << num_drones << " followers" << std::endl;
 
-      for (int i = 0; i < num_followers; i++){ 
+      for (int i = 0; i < num_drones; i++){ 
 	individual_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("tello_" + std::to_string(i) + "/tello/reference/pose", 10));
         geometry_msgs::msg::Pose pose;
         geometry_msgs::msg::PoseStamped pose_stamped;
-        if (num_followers % 2 != 0){
-          pose.position.x = cos(((2 * M_PI * i) / num_followers) + (M_PI / (2 * num_followers)));
-          pose.position.y = sin(((2 * M_PI * i) / num_followers) + (M_PI / (2 * num_followers)));
+        if (num_drones % 2 != 0){
+          pose.position.x = cos(((2 * M_PI * i) / num_drones) + (M_PI / (2 * num_drones)));
+          pose.position.y = sin(((2 * M_PI * i) / num_drones) + (M_PI / (2 * num_drones)));
         } else {
-          pose.position.x = cos(((2 * M_PI * i) / num_followers) + (M_PI / num_followers)); 
-          pose.position.y = sin(((2 * M_PI * i) / num_followers) + (M_PI / num_followers));
+          pose.position.x = cos(((2 * M_PI * i) / num_drones) + (M_PI / num_drones)); 
+          pose.position.y = sin(((2 * M_PI * i) / num_drones) + (M_PI / num_drones));
         }
         pose.position.z = 0;
         pose.orientation.x = 0;
@@ -81,7 +81,7 @@ class FormationsHandler : public rclcpp::Node{
 
       // Broadcast formation
       //for (int i = 0; i < (int)formation_definition.poses.size(); i++){
-      for (int i = 0; i < this->get_parameter("num_followers").as_int(); i++){ 
+      for (int i = 0; i < this->get_parameter("num_drones").as_int(); i++){ 
         geometry_msgs::msg::TransformStamped formation_transform;
         formation_transform.header.stamp = this->now();
         formation_transform.header.frame_id = "centroid";

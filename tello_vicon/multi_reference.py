@@ -42,8 +42,10 @@ class TelloReference(Node):
     # Iterate over all drones
     for i in range(self.get_parameter('num_drones').value):
       self.reference_pose.header.stamp = self.get_clock().now().to_msg()
-      self.reference_pose.pose.position.x = 0.5 * math.sin((self.time+((i+1)*math.pi))/4)
-      self.reference_pose.pose.position.y = 0.5 * math.cos((self.time+((i+1)*math.pi))/4)
+      #self.reference_pose.pose.position.x = 1.5 * math.sin((self.time+((i+1)*math.pi))/4)
+      #self.reference_pose.pose.position.y = 1.5 * math.cos((self.time+((i+1)*math.pi))/4)
+      self.reference_pose.pose.position.x = 0.5 * math.sin( ((self.time)/8) + (i*math.pi) )
+      self.reference_pose.pose.position.y = 0.5 * math.cos( ((self.time)/8) + (i*math.pi) )
       #self.reference_pose.pose.position.z = 1+0.5 * math.sin((self.time+((i+1)*math.pi))/8)
       self.reference_pose.pose.position.z = 1.0
       self.reference_pose.pose.orientation.x = 0.0
@@ -54,8 +56,8 @@ class TelloReference(Node):
       self.reference_pose.pose.orientation.w = -0.71
 
       self.reference_velocity.header.stamp = self.get_clock().now().to_msg()
-      self.reference_velocity.twist.linear.x = 0.25 * (((i+1)*math.pi)/4) * 0.5 * math.cos((self.time+((i+1)*math.pi))/4)
-      self.reference_velocity.twist.linear.y = 0.25 * (((i+1)*math.pi)/4) * -0.5 * math.sin((self.time+((i+1)*math.pi))/4)
+      #self.reference_velocity.twist.linear.x = 0.25 * (((i+1)*math.pi)/4) * 1.5 * math.cos((self.time+((i+1)*math.pi))/4)
+      #self.reference_velocity.twist.linear.y = 0.25 * (((i+1)*math.pi)/4) * -1.5 * math.sin((self.time+((i+1)*math.pi))/4)
       #self.reference_velocity.twist.linear.z = 0.125 * (((i+1)*math.pi)/8) * 0.5 * math.cos((self.time+((i+1)*math.pi))/8)
       self.reference_velocity.twist.linear.z = 0.0
       self.reference_velocity.twist.angular.x = 0.0

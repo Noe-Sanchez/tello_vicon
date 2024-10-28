@@ -160,6 +160,7 @@ class VectorFViz : public rclcpp::Node{
       //uaux_publisher    = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
 
       viz_timer = this->create_wall_timer(50ms, std::bind(&VectorFViz::viz_callback, this));
+      //viz_timer = this->create_wall_timer(500ms, std::bind(&VectorFViz::viz_callback, this));
   
       // Declare num_drones parameter
       this->declare_parameter("num_drones", 1);
@@ -220,17 +221,17 @@ class VectorFViz : public rclcpp::Node{
 		xpos = -xextent + 2*j*xextent/(xdivs-1) + drone_positions[id](0)*c*0.005;
 		ypos = -yextent + 2*k*yextent/(ydivs-1) + drone_positions[id](1)*c*0.005;
 		zpos = -zextent + 2*l*zextent/(zdivs-1) + drone_positions[id](2)*c*0.005;
-	      /*}else{
-		std::cout << "Using new interp for id" << id << std::endl;
-		xpos = -xextent + j*xextent/(xdivs-1);
-		ypos = -yextent + k*yextent/(ydivs-1);
-		zpos = -zextent + l*zextent/(zdivs-1);
-	      }*/
+	      //}else{
+		//std::cout << "Using new interp for id" << id << std::endl;
+		//xpos = -xextent + j*xextent/(xdivs-1);
+		//ypos = -yextent + k*yextent/(ydivs-1);
+		//zpos = -zextent + l*zextent/(zdivs-1);
+	      //}*/
 	      //float ypos = -yextent + k*yextent/(ydivs-1);
 	      //float zpos = -zextent + l*zextent/(zdivs-1);
 	      // Check magnitude of position: should we ignore this marker?
 	      float mag = sqrt(xpos*xpos + ypos*ypos + zpos*zpos);
-	      if (mag > D){
+	      if (mag > D-0.01){
 		marker.color.a = 0.01; 
 	      }else{
 		marker.color.a = 0.75;
@@ -239,7 +240,7 @@ class VectorFViz : public rclcpp::Node{
 	      marker.pose.position.y = ypos;
 	      marker.pose.position.z = zpos;
 	      marker.header.frame_id = "tello" + std::to_string(i);
-	      marker.header.stamp = this->now();
+	      //marker.header.stamp = this->now();
 	      marker.type = visualization_msgs::msg::Marker::ARROW;
 	      marker.action = visualization_msgs::msg::Marker::ADD;
 	      //marker.scale.x = 0.25;
@@ -250,9 +251,9 @@ class VectorFViz : public rclcpp::Node{
 	      marker.scale.z = xextent/((xdivs-1)*10);
 	      //marker.color.a = 0.75;
 	      // Change color depending on drone (i variable)
-	      marker.color.r = ((float)i)/((float)num_drones); 
+	      marker.color.r = ((float)i)/((float)num_drones-1); 
 	      marker.color.g = 0.2;
-	      marker.color.b = 1 - ((float)i)/((float)num_drones); 
+	      marker.color.b = 1 - ((float)i)/((float)num_drones-1); 
 	      //std::cout << "num_drones: " << num_drones << " i: " << i << " r: " << marker.color.r << " g: " << marker.color.g << " b: " << marker.color.b << std::endl;
 	      // use j, k, l to set the position of the marker
 	      // Use each axis for the vector field
@@ -261,14 +262,12 @@ class VectorFViz : public rclcpp::Node{
 	      //unit << 1, 0, 0;
 	      //if ( i == 0){
 		
-	      //pos << xpos - ypos, 
-	      //	     xpos + ypos,
-	     // 	     zpos;
+	      //pos << xpos - ypos, xpos + ypos, zpos;
 	      
 	      //}else{
 	
 	      pos << (-tanh((5/D)*abs(zpos))+1)*(xpos - ypos), 
-		       (-tanh((5/D)*abs(zpos))+1)*(xpos + ypos),
+		     (-tanh((5/D)*abs(zpos))+1)*(xpos + ypos),
 		       zpos;
 	      
 	      //}
@@ -296,6 +295,36 @@ class VectorFViz : public rclcpp::Node{
 	      marker.pose.orientation.z = q.z();
 	      marker.pose.orientation.w = q.w();
 	      marker.id = id + i*1000; 
+
+	      // Sanity check for transform (nan and inf)
+	      if (std::isnan(marker.pose.orientation.x) || std::isnan(marker.pose.orientation.y) || std::isnan(marker.pose.orientation.z) || std::isnan(marker.pose.orientation.w)){
+		//std::cout << "Nan detected in quaternion" << std::endl;
+		marker.pose.orientation.x = 0;
+		marker.pose.orientation.y = 0;
+		marker.pose.orientation.z = 0;
+		marker.pose.orientation.w = 1;
+	      }
+	      if (std::isinf(marker.pose.orientation.x) || std::isinf(marker.pose.orientation.y) || std::isinf(marker.pose.orientation.z) || std::isinf(marker.pose.orientation.w)){
+		//std::cout << "Inf detected in quaternion" << std::endl;
+		marker.pose.orientation.x = 0;
+		marker.pose.orientation.y = 0;
+		marker.pose.orientation.z = 0;
+		marker.pose.orientation.w = 1;
+	      }
+	      if (std::isnan(marker.pose.position.x) || std::isnan(marker.pose.position.y) || std::isnan(marker.pose.position.z)){
+		//std::cout << "Nan detected in position" << std::endl;
+		marker.pose.position.x = 0;
+		marker.pose.position.y = 0;
+		marker.pose.position.z = 0;
+	      }
+	      if (std::isinf(marker.pose.position.x) || std::isinf(marker.pose.position.y) || std::isinf(marker.pose.position.z)){
+		//std::cout << "Inf detected in position" << std::endl;
+		marker.pose.position.x = 0;
+		marker.pose.position.y = 0;
+		marker.pose.position.z = 0;
+	      }
+
+
 	      drone_vecs[i].markers.push_back(marker);
 	      id++;
 	      //}
