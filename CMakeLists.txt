@@ -21,8 +21,14 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+include_directories(include)
+
 add_executable(asmc_node src/asmc.cpp)
 ament_target_dependencies(asmc_node rclcpp std_msgs geometry_msgs)
+add_executable(simple_dynamics_node src/simple_dynamics.cpp)
+ament_target_dependencies(simple_dynamics_node rclcpp std_msgs geometry_msgs tf2_ros)
+add_executable(vectorfviz_node src/vectorf_visualization.cpp)
+ament_target_dependencies(vectorfviz_node rclcpp std_msgs geometry_msgs visualization_msgs)
 add_executable(differentiator_node src/differentiator.cpp)
 ament_target_dependencies(differentiator_node rclcpp std_msgs geometry_msgs tf2_ros)
 add_executable(pid_node src/pid.cpp)
@@ -35,13 +41,9 @@ add_executable(unity_ui_node src/unity_ui.cpp)
 ament_target_dependencies(unity_ui_node rclcpp std_msgs geometry_msgs)
 add_executable(asmc_avoidance_node src/asmc_avoidance.cpp)
 ament_target_dependencies(asmc_avoidance_node rclcpp std_msgs geometry_msgs)
-add_executable(simple_dynamics_node src/simple_dynamics.cpp)
-ament_target_dependencies(simple_dynamics_node rclcpp std_msgs geometry_msgs tf2_ros)
 
 add_executable(test_node src/test.cpp)
 ament_target_dependencies(test_node rclcpp std_msgs geometry_msgs)
-add_executable(vectorfviz_node src/vectorf_visualization.cpp)
-ament_target_dependencies(vectorfviz_node rclcpp std_msgs geometry_msgs visualization_msgs)
 
 ament_python_install_package(${PROJECT_NAME})
 
