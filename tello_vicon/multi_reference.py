@@ -52,12 +52,14 @@ class TelloReference(Node):
       self.reference_pose.pose.orientation.y = 0.0
       #self.reference_pose.pose.orientation.z = math.sin(self.time*math.pi/(2*8))#0.71
       #self.reference_pose.pose.orientation.w = math.cos(self.time*math.pi/(2*8))#0.71 
-      self.reference_pose.pose.orientation.z = 0.71
-      self.reference_pose.pose.orientation.w = -0.71
+      #self.reference_pose.pose.orientation.z = 0.71
+      #self.reference_pose.pose.orientation.w = -0.71
+      self.reference_pose.pose.orientation.z = 0.0
+      self.reference_pose.pose.orientation.w = 1.0
 
       self.reference_velocity.header.stamp = self.get_clock().now().to_msg()
-      #self.reference_velocity.twist.linear.x = 0.25 * (((i+1)*math.pi)/4) * 1.5 * math.cos((self.time+((i+1)*math.pi))/4)
-      #self.reference_velocity.twist.linear.y = 0.25 * (((i+1)*math.pi)/4) * -1.5 * math.sin((self.time+((i+1)*math.pi))/4)
+      self.reference_velocity.twist.linear.x = 0.25 * (((i+1)*math.pi)/4) * 1.5 * math.cos((self.time+((i+1)*math.pi))/4)
+      self.reference_velocity.twist.linear.y = 0.25 * (((i+1)*math.pi)/4) * -1.5 * math.sin((self.time+((i+1)*math.pi))/4)
       #self.reference_velocity.twist.linear.z = 0.125 * (((i+1)*math.pi)/8) * 0.5 * math.cos((self.time+((i+1)*math.pi))/8)
       self.reference_velocity.twist.linear.z = 0.0
       self.reference_velocity.twist.angular.x = 0.0

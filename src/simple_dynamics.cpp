@@ -203,11 +203,12 @@ class SimpleDynamics : public rclcpp::Node{
     void control_input_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
       //q_dot << 0, msg->angular.x, msg->angular.y, msg->angular.z;    
       //p_dot << msg->linear.x, msg->linear.y, msg->linear.z;
-      std::cout << msg->linear.z << std::endl;
-      p_dot << 3.2 * (msg->linear.x + 50.0)/(100.0) - 1.6,
-               3.2 * (msg->linear.y + 50.0)/(100.0) - 1.6,
-               1.9 * (msg->linear.z + 50.0)/(100.0) - 0.95;
-      q_dot << 0, 0, 0, 2.0 * (msg->angular.z + 50.0)/(100.0) - 1.0;
+      //std::cout << msg->linear.z << std::endl;
+      p_dot << 3.2 * (msg->linear.x + 100.0)/(200.0) - 1.6,
+               3.2 * (msg->linear.y + 100.0)/(200.0) - 1.6,
+               //1.9 * (msg->linear.z + 50.0)/(100.0) - 0.95;
+               2 * (msg->linear.z + 100.0)/(200.0) - 1;
+      q_dot << 0, 0, 0, 2.0 * (msg->angular.z + 100.0)/(200.0) - 1.0;
     }
 
     void dynamics_callback(){
