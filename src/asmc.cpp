@@ -68,6 +68,19 @@ class AsmcController : public rclcpp::Node{
       K_dot      << 0, 0, 0, 0;
       sigma      << 0, 0, 0, 0;
       uaux       << 0, 0, 0, 0;
+      u          << 0, 0, 0, 0;
+      u_int      << 0, 0, 0, 0;
+      u_prev     << 0, 0, 0, 0;
+      u_t        << 0, 0, 0, 0;
+
+      // 7.321 x 10^-5 kg m^2
+      Ixx = 0.00007321;
+      Iyy = 0.00013604;
+      Izz = 0.00007317;
+
+      J << Ixx, 0, 0,
+	    0, Iyy, 0,
+	    0, 0, Izz;
 
       reference_pose.pose.position.x = (double)drone_id; 
       reference_pose.pose.position.y = 0;
@@ -161,7 +174,9 @@ class AsmcController : public rclcpp::Node{
 
       // Control law 
       //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5; //Original
-      uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      uaux << -1 * ewise(zetta, e) - 1 * ewise(lambda, e_dot);
+      //uaux << ewise(e, zetta); 
               
       // Original feedback linearization
       /*u_rot << 0,
@@ -178,34 +193,100 @@ class AsmcController : public rclcpp::Node{
                xd_dot(0) -uaux(0)/term1(0),
 	       xd_dot(1) -uaux(1)/term1(1),
 	       xd_dot(2) -uaux(2)/term1(2);*/
+
+      // Attitude term
+      Eigen::Vector3d term2;
+      Eigen::Vector3d OMEGA;
+      Eigen::Matrix3d OMEGA_cross;
+      Eigen::Matrix3d J_inv;
+      J_inv = J.inverse();
+      OMEGA << estimator_velocity.twist.angular.x, estimator_velocity.twist.angular.y, estimator_velocity.twist.angular.z;
+      OMEGA_cross << 0, -OMEGA(2), OMEGA(1),
+	             OMEGA(2), 0, -OMEGA(0),
+	             -OMEGA(1), OMEGA(0), 0;
+      
+      // omega x J omega
+      //std::cout << "Sanity check " <<  J * OMEGA << std::endl;
+      //std::cout << "Sanity check " <<  OMEGA_cross * (J * OMEGA) << std::endl;
+      std::cout << "OMEGA" << OMEGA << std::endl;
+      std::cout << "Sanity check " <<  J_inv * (OMEGA_cross * (J * OMEGA)) << std::endl;
+      term2 = J_inv * (OMEGA_cross * (J * OMEGA)); 
+
+      u << -uaux(0), 
+	   -uaux(1), 
+	   -uaux(2), 
+	   -uaux(3) - term2(2);
+	   //-uaux(3);*/
+
+      // Trapezoidal integral of u
+      u_int += 0.01 * (u + u_prev) / 2;
+      u_prev = u;
+
+
       u_rot << 0,
-               xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
+               /*xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
 	       xd_dot(1) - ewise(ewise(zetta, lambda), uaux)(1)/term1(1),
-	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);
+	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);*/
+               /*-uaux(0),
+	       -uaux(1),
+	       -uaux(2);*/
+               u_int(0),
+	       u_int(1),
+	       u_int(2);
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
+      //u_rot = kronecker(kronecker(q_hat, u_rot), q_hat_conj);
 
       //uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
       //uaux(3) = xd_dot(3) - uaux(3) / term1(3);
-      uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
+      //uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
+      /*u << u_rot(1), 
+	   u_rot(2), 
+	   u_rot(3), 
+	   -uaux(3) + term2(2);
 
-      uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
+      // Trapezoidal integral of u
+      u_int += 0.01 * (u + u_prev) / 2;
+      u_prev = u;*/
+      
+      
+      //std::cout << "u: " << u << std::endl;
+      //std::cout << "u_int: " << u_int << std::endl;
+      /*uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
       uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
       uaux(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
-      uaux(3) = std::min(std::max(uaux(3),  -1.0), 1.0);
+      uaux(3) = std::min(std::max(uaux(3),  -1.0), 1.0);*/
 
+      /*u_t(0) = std::min(std::max(u_int(0), -1.6), 1.6);
+      u_t(1) = std::min(std::max(u_int(1), -1.6), 1.6);
+      u_t(2) = std::min(std::max(u_int(2), -1.0), 1.0);
+      u_t(3) = std::min(std::max(u_int(3), -1.0), 1.0);*/
+      u_t(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
+      u_t(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
+      u_t(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
+      u_t(3) = std::min(std::max(u_int(3), -1.0), 1.0);
 
       // Normalize control output
       
-      uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
+      /*uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
       uaux(1) = 100 * (uaux(1) + 1.6)/(3.2) - 50;
       //uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
-      uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
+      uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;*/
+      
+      u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
+      u_t(1) = 200 * (u_t(1) + 1.6)/(3.2) - 100;
+      u_t(2) = 200 * (u_t(2) + 1.0)/(2.0) - 100;
+      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;
 
-      _uaux.linear.x =  uaux(0);
+      /*_uaux.linear.x =  uaux(0);
       _uaux.linear.y =  uaux(1);
       _uaux.linear.z =  uaux(2);
-      _uaux.angular.z = uaux(3);
+      _uaux.angular.z = uaux(3);*/
+
+      _uaux.linear.x  = u_t(0);  
+      _uaux.linear.y  = u_t(1); 
+      _uaux.linear.z  = u_t(2); 
+      _uaux.angular.z = u_t(3);
 
       _sigma.linear.x = sigma(0);
       _sigma.linear.y = sigma(1);
@@ -285,8 +366,17 @@ class AsmcController : public rclcpp::Node{
     Eigen::Vector4d sigma;
     Eigen::Vector4d uaux;
     Eigen::Vector4d u_rot;
+    Eigen::Vector4d u;
+    Eigen::Vector4d u_int;
+    Eigen::Vector4d u_t;
+    Eigen::Vector4d u_prev;
+    Eigen::Matrix3d J;
 
     int drone_id;
+
+    float Ixx;
+    float Iyy;
+    float Izz;
 
     std::vector<double> gains;
 

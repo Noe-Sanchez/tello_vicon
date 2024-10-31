@@ -117,9 +117,12 @@ class SimpleDynamics : public rclcpp::Node{
       //pose_dot.header.frame_id = "tello";
       pose_dot.header.frame_id = "tello" + std::to_string(drone_id);
       pose_dot.header.stamp = this->now();
-      pose_dot.twist.linear.x = p_dot(0);
-      pose_dot.twist.linear.y = p_dot(1);
-      pose_dot.twist.linear.z = p_dot(2);
+      //pose_dot.twist.linear.x = p_dot(0);
+      //pose_dot.twist.linear.y = p_dot(1);
+      //pose_dot.twist.linear.z = p_dot(2);
+      pose_dot.twist.linear.x = p_dot_rot(1);
+      pose_dot.twist.linear.y = p_dot_rot(2);
+      pose_dot.twist.linear.z = p_dot_rot(3);
       pose_dot.twist.angular.x = q_dot(1);
       pose_dot.twist.angular.y = q_dot(2);
       pose_dot.twist.angular.z = q_dot(3);
