@@ -73,23 +73,58 @@ class TrafficControl : public rclcpp::Node{
     void control_callback(){
     }
 
-    void follower_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg, int i){}
-    void follower_vel_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg, int i){}
-    void leader_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){}
-    void formation_definition_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg){}
+    void follower_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg, int i){
+      // Get follower position and quaternion
+      dfs(1, i) = msg->pose.position.x;
+      dfs(2, i) = msg->pose.position.y;
+      dfs(3, i) = msg->pose.position.z;
+      qfs(0, i) = msg->pose.orientation.w;
+      qfs(1, i) = msg->pose.orientation.x;
+      qfs(2, i) = msg->pose.orientation.y;
+      qfs(3, i) = msg->pose.orientation.z;
+    }
+    void follower_vel_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg, int i){
+      // Get follower velocity
+      vfs(0, i) = msg->twist.linear.x;
+      vfs(1, i) = msg->twist.linear.y;
+      vfs(2, i) = msg->twist.linear.z;
+      vfs(3, i) = msg->twist.angular.z;
+    }
+    void leader_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
+      // Get leader position and quaternion
+      dl(1) = msg->pose.position.x;
+      dl(2) = msg->pose.position.y;
+      dl(3) = msg->pose.position.z;
+      ql(0) = msg->pose.orientation.w;
+      ql(1) = msg->pose.orientation.x;
+      ql(2) = msg->pose.orientation.y;
+      ql(3) = msg->pose.orientation.z;
+    }
+    void formation_definition_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg){
+      // Get formation definition
+      for (int i = 0; i < num_drones; i++){
+	gammasd(1, i) = msg->poses[i].position.x;
+	gammasd(2, i) = msg->poses[i].position.y;
+	gammasd(3, i) = msg->poses[i].position.z;
+	qdfs(0, i) = msg->poses[i].orientation.w;
+	qdfs(1, i) = msg->poses[i].orientation.x;
+	qdfs(2, i) = msg->poses[i].orientation.y;
+	qdfs(3, i) = msg->poses[i].orientation.z;
+      }
+    }
 
 
   private:
     int num_drones; // Number of agents (leader is not included) 
 
-    Eigen::Vector4d              dl;          // World position of the leader [0, x, y, z]^T
-    Eigen::Vector4d              vl;          // World velocity of the leader [x_dot, y_dot, z_dot, yaw_dot]^T
-    Eigen::Vector4d              ql;          // Leader quaternion [w, x, y, z]^T
-    Eigen::Vector4d              ql_dot;      // Leader quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T
-    Eigen::Vector4d              omegal;      // Leader angular velocity [0, x_dot, y_dot, z_dot]^T
+    Eigen::Vector4d              dl;               // World position of the leader [0, x, y, z]^T
+    Eigen::Vector4d              vl;               // World velocity of the leader [x_dot, y_dot, z_dot, yaw_dot]^T
+    Eigen::Vector4d              ql;               // Leader quaternion [w, x, y, z]^T
+    Eigen::Vector4d              ql_dot;           // Leader quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T
+    Eigen::Vector4d              omegal;           // Leader angular velocity [0, x_dot, y_dot, z_dot]^T
     Eigen::Matrix<double, 4, Dynamic> qfs;         // Followers quaternions [w, x, y, z]^T 
     Eigen::Matrix<double, 4, Dynamic> dfs;         // World positions of the followers
-    Eigen::Matrix<double, 4, Dynamic> vfs;         // World velocities of the followers
+    Eigen::Matrix<double, 4, Dynamic> vfs;         // World velocities of the followers [x_dot, y_dot, z_dot, yaw_dot]^T
     Eigen::Matrix<double, 4, Dynamic> gammas;      // Follower position with respect to the leader (Body)
     Eigen::Matrix<double, 4, Dynamic> gammas_dot;  // Follower velocity with respect to the leader (Body)
     Eigen::Matrix<double, 4, Dynamic> lambdas;     // Follower position with respect to the leader (World)
