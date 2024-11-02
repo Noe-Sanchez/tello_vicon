@@ -12,6 +12,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "geometry_msgs/msg/pose_array.hpp"
 
 using namespace std::chrono_literals;
 
@@ -33,7 +34,7 @@ class TrafficControl : public rclcpp::Node{
       ql_dot = zero4d;
       omegal = zero4d;
 
-      Eigen::Matrix<double, 4, Dynamic> zero4d_dyn = Eigen::Matrix<double, 4, Dynamic>::Zero(4, num_drones); 
+      Eigen::Matrix<double, 4, Eigen::Dynamic> zero4d_dyn = Eigen::Matrix<double, 4, Eigen::Dynamic>::Zero(4, num_drones); 
       qfs         = zero4d_dyn;
       dfs         = zero4d_dyn;
       vfs         = zero4d_dyn;
@@ -61,16 +62,45 @@ class TrafficControl : public rclcpp::Node{
       // Initialize subscribers and publishers
       for (int i = 0; i < num_drones; i++){
 	std::function<void(const geometry_msgs::msg::PoseStamped::SharedPtr)> follower_proto = std::bind(&TrafficControl::follower_pose_callback, this, std::placeholders::_1, i);
-	follower_pose_subscriptions.push_back(this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/estimator/pose", follower_proto));
+	follower_pose_subscriptions.push_back(this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/estimator/pose", 10, follower_proto));
 	std::function<void(const geometry_msgs::msg::TwistStamped::SharedPtr)> follower_vel_proto = std::bind(&TrafficControl::follower_vel_callback, this, std::placeholders::_1, i);	
-	follower_vel_subscriptions.push_back(this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/estimator/velocity", follower_vel_proto));
+	follower_vel_subscriptions.push_back(this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/estimator/velocity", 10, follower_vel_proto));
 
-	follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/reference/pose", 10));
-	follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/reference/velocity", 10));
+	//follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/reference/pose", 10));
+	//follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/reference/velocity", 10));
+	follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/echo/pose", 10));
+	follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/echo/velocity", 10));
+	
+	follower_pose_msgs.push_back(geometry_msgs::msg::PoseStamped());
+	follower_vel_msgs.push_back(geometry_msgs::msg::TwistStamped());
       }
     }
 
     void control_callback(){
+      // Echo poses and velocities for now
+      for (int i = 0; i < num_drones; i++){
+	follower_pose_msgs[i].pose.position.x = dfs(1, i);
+	follower_pose_msgs[i].pose.position.y = dfs(2, i);
+	follower_pose_msgs[i].pose.position.z = dfs(3, i);
+	follower_pose_msgs[i].pose.orientation.w = qfs(0, i);
+	follower_pose_msgs[i].pose.orientation.x = qfs(1, i);
+	follower_pose_msgs[i].pose.orientation.y = qfs(2, i);
+	follower_pose_msgs[i].pose.orientation.z = qfs(3, i);
+
+	follower_vel_msgs[i].twist.linear.x = vfs(0, i);
+	follower_vel_msgs[i].twist.linear.y = vfs(1, i);
+	follower_vel_msgs[i].twist.linear.z = vfs(2, i);
+	follower_vel_msgs[i].twist.angular.z = vfs(3, i);
+
+	follower_pose_msgs[i].header.stamp = this->now();
+	follower_vel_msgs[i].header.stamp = this->now();
+	follower_pose_msgs[i].header.frame_id = "world";
+	follower_vel_msgs[i].header.frame_id = "world";
+
+	follower_pose_publishers[i]->publish(follower_pose_msgs[i]);
+	follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
+      
+      }
     }
 
     void follower_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg, int i){
@@ -106,10 +136,10 @@ class TrafficControl : public rclcpp::Node{
 	gammasd(1, i) = msg->poses[i].position.x;
 	gammasd(2, i) = msg->poses[i].position.y;
 	gammasd(3, i) = msg->poses[i].position.z;
-	qdfs(0, i) = msg->poses[i].orientation.w;
-	qdfs(1, i) = msg->poses[i].orientation.x;
-	qdfs(2, i) = msg->poses[i].orientation.y;
-	qdfs(3, i) = msg->poses[i].orientation.z;
+	qdfs(0, i)    = msg->poses[i].orientation.w;
+	qdfs(1, i)    = msg->poses[i].orientation.x;
+	qdfs(2, i)    = msg->poses[i].orientation.y;
+	qdfs(3, i)    = msg->poses[i].orientation.z;
       }
     }
 
@@ -122,37 +152,40 @@ class TrafficControl : public rclcpp::Node{
     Eigen::Vector4d              ql;               // Leader quaternion [w, x, y, z]^T
     Eigen::Vector4d              ql_dot;           // Leader quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T
     Eigen::Vector4d              omegal;           // Leader angular velocity [0, x_dot, y_dot, z_dot]^T
-    Eigen::Matrix<double, 4, Dynamic> qfs;         // Followers quaternions [w, x, y, z]^T 
-    Eigen::Matrix<double, 4, Dynamic> dfs;         // World positions of the followers
-    Eigen::Matrix<double, 4, Dynamic> vfs;         // World velocities of the followers [x_dot, y_dot, z_dot, yaw_dot]^T
-    Eigen::Matrix<double, 4, Dynamic> gammas;      // Follower position with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Dynamic> gammas_dot;  // Follower velocity with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Dynamic> lambdas;     // Follower position with respect to the leader (World)
-    Eigen::Matrix<double, 4, Dynamic> lambdas_dot; // Follower velocity with respect to the leader (World)
-    Eigen::Matrix<double, 4, Dynamic> gammasd;     // Desired follower position with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Dynamic> gammasd_dot; // Desired follower velocity with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Dynamic> qdfs;        // Desired follower quaternion with respect to the leader
-    Eigen::Matrix<double, 4, Dynamic> etas;        // QLM of the followers
-    Eigen::Matrix<double, 4, Dynamic> efs;         // Formation error [x, y, z, qlm(3)]^T
-    Eigen::Matrix<double, 4, Dynamic> efs_prev;    // Formation error previous
-    Eigen::Matrix<double, 4, Dynamic> efs_int;     // Formation error integral
-    Eigen::Matrix<double, 4, Dynamic> k;           // Formation sliding gain [kx, ky, kz, kpsi]^T
-    Eigen::Matrix<double, 4, Dynamic> kappa1;      // Formation constant effort gain
-    Eigen::Matrix<double, 4, Dynamic> kappa2;      // Formation smooth effort gain
-    Eigen::Matrix<double, 4, Dynamic> sigmaf;      // Formation sliding surface 
-    Eigen::Matrix<double, 4, Dynamic> ufs;         // Formation control output
-    Eigen::Matrix<double, 4, Dynamic> ufs_prev;    // Formation control output previous
-    Eigen::Matrix<double, 4, Dynamic> ufs_int;     // Formation control output integral [x, y, z, psi]^T (Psi unused)
-    Eigen::Matrix<double, 4, Dynamic> omegafu;     // Formation output angular velocity [0, 0, 0, ufs(4)]^T
-    Eigen::Matrix<double, 4, Dynamic> qfu;         // Formation output quaternion [w, x, y, z]^T
+    Eigen::Matrix<double, 4, Eigen::Dynamic> qfs;         // Followers quaternions [w, x, y, z]^T 
+    Eigen::Matrix<double, 4, Eigen::Dynamic> dfs;         // World positions of the followers
+    Eigen::Matrix<double, 4, Eigen::Dynamic> vfs;         // World velocities of the followers [x_dot, y_dot, z_dot, yaw_dot]^T
+    Eigen::Matrix<double, 4, Eigen::Dynamic> gammas;      // Follower position with respect to the leader (Body)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> gammas_dot;  // Follower velocity with respect to the leader (Body)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> lambdas;     // Follower position with respect to the leader (World)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> lambdas_dot; // Follower velocity with respect to the leader (World)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> gammasd;     // Desired follower position with respect to the leader (Body)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> gammasd_dot; // Desired follower velocity with respect to the leader (Body)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> qdfs;        // Desired follower quaternion with respect to the leader
+    Eigen::Matrix<double, 4, Eigen::Dynamic> etas;        // QLM of the followers
+    Eigen::Matrix<double, 4, Eigen::Dynamic> efs;         // Formation error [x, y, z, qlm(3)]^T
+    Eigen::Matrix<double, 4, Eigen::Dynamic> efs_prev;    // Formation error previous
+    Eigen::Matrix<double, 4, Eigen::Dynamic> efs_int;     // Formation error integral
+    Eigen::Matrix<double, 4, Eigen::Dynamic> k;           // Formation sliding gain [kx, ky, kz, kpsi]^T
+    Eigen::Matrix<double, 4, Eigen::Dynamic> kappa1;      // Formation constant effort gain
+    Eigen::Matrix<double, 4, Eigen::Dynamic> kappa2;      // Formation smooth effort gain
+    Eigen::Matrix<double, 4, Eigen::Dynamic> sigmaf;      // Formation sliding surface 
+    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs;         // Formation control output
+    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs_prev;    // Formation control output previous
+    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs_int;     // Formation control output integral [x, y, z, psi]^T (Psi unused)
+    Eigen::Matrix<double, 4, Eigen::Dynamic> omegafu;     // Formation output angular velocity [0, 0, 0, ufs(4)]^T
+    Eigen::Matrix<double, 4, Eigen::Dynamic> qfu;         // Formation output quaternion [w, x, y, z]^T
+
+    std::vector<geometry_msgs::msg::PoseStamped> follower_pose_msgs; // For publishing
+    std::vector<geometry_msgs::msg::TwistStamped> follower_vel_msgs; // For publishing
 
     rclcpp::TimerBase::SharedPtr control_timer;
     std::vector<rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr>  follower_pose_subscriptions;
     std::vector<rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr> follower_vel_subscriptions;
     std::vector<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr>     follower_pose_publishers;
     std::vector<rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr>    follower_vel_publishers;
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr>  		   leader_pose_subscription;
-    rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr>  		   formation_definition_subscription;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  		   leader_pose_subscription;
+    rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr  		   formation_definition_subscription;
 
 };
 
