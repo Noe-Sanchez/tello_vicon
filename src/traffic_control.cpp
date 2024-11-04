@@ -16,11 +16,12 @@
 
 using namespace std::chrono_literals;
 
-//Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::Vector4d b){
-Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr b){
+Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::Vector4d b){
+//Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr b){
   // Calculate cross product of a and b, where both are [0, x, y, z]^T
   // Result is [0, a x b]^T
   Eigen::Vector4d c;
+  c(0) = 0;
   c(1) = a(2)*b(3) - a(3)*b(2);
   c(2) = a(3)*b(1) - a(1)*b(3);
   c(3) = a(1)*b(2) - a(2)*b(1);
@@ -98,6 +99,9 @@ class TrafficControl : public rclcpp::Node{
       // Get drone_id parameter
       this->declare_parameter("num_drones", 0);
       num_drones = this->get_parameter("num_drones").as_int();
+
+      // Formation definition subscriber
+      formation_definition_subscription = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation_definition", 10, std::bind(&TrafficControl::formation_definition_callback, this, std::placeholders::_1));
       
       // Make 0.5s timer
       control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
@@ -109,8 +113,9 @@ class TrafficControl : public rclcpp::Node{
       omegal = zero4d;
       ql_dot = zero4d; 
       ql     << 1, 0, 0, 0; 
+      ql_conj << 1, 0, 0, 0;
 
-      Eigen::Matrix<double, 4, Eigen::Dynamic> zero4d_dyn = Eigen::Matrix<double, 4, Eigen::Dynamic>::Zero(4, num_drones); 
+      /*Eigen::Matrix<double, 4, Eigen::Dynamic> zero4d_dyn = Eigen::Matrix<double, 4, Eigen::Dynamic>::Zero(4, num_drones); 
       dfs         = zero4d_dyn;
       vfs         = zero4d_dyn;
       gammas      = zero4d_dyn;
@@ -134,16 +139,18 @@ class TrafficControl : public rclcpp::Node{
       qfs         = zero4d_dyn;
       qfs_conj    = zero4d_dyn;
       qdfs        = zero4d_dyn;
-      qfu         = zero4d_dyn;
+      qfu         = zero4d_dyn;*/
 
       //Eigen::Vector<double, num_drones> ones_dyn = Eigen::Vector<double, num_drones>::Ones();
-      Eigen::Vector<double, Eigen::Dynamic> ones_dyn = Eigen::Vector<double, Eigen::Dynamic>::Ones(num_drones);
+      //Eigen::Vector<double, Eigen::Dynamic> ones_dyn = Eigen::Vector<double, Eigen::Dynamic>::Ones(num_drones);
 
       // Set all columns of quaternion matrices to identity ( qfs, qfs_conj, qdfs, qfu)
-      qfs.row(0)      = ones_dyn;
+      /*qfs.row(0)      = ones_dyn;
       qfs_conj.row(0) = ones_dyn;
       qdfs.row(0)     = ones_dyn;
-      qfu.row(0)       = ones_dyn;
+      qfu.row(0)       = ones_dyn;*/
+      Eigen::Vector4d identity;
+      identity << 1, 0, 0, 0;
 
       // Initialize subscribers and publishers
       for (int i = 0; i < num_drones; i++){
@@ -152,79 +159,161 @@ class TrafficControl : public rclcpp::Node{
 	std::function<void(const geometry_msgs::msg::TwistStamped::SharedPtr)> follower_vel_proto = std::bind(&TrafficControl::follower_vel_callback, this, std::placeholders::_1, i);	
 	follower_vel_subscriptions.push_back(this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/estimator/velocity", 10, follower_vel_proto));
 
-	//follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/reference/pose", 10));
-	//follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/reference/velocity", 10));
-	follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/echo/pose", 10));
-	follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/echo/velocity", 10));
+	follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/reference/pose", 10));
+	follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/reference/velocity", 10));
+	//follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/echo/pose", 10));
+	//follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/echo/velocity", 10));
 	
 	follower_pose_msgs.push_back(geometry_msgs::msg::PoseStamped());
 	follower_vel_msgs.push_back(geometry_msgs::msg::TwistStamped());
+
+	// Set all matrices to zero, and all quaternions to identity, except gains
+	dfs.push_back(zero4d);
+	vfs.push_back(zero4d);
+	gammas.push_back(zero4d);
+	gammas_dot.push_back(zero4d);
+	lambdas.push_back(zero4d);
+	lambdas_dot.push_back(zero4d);
+	gammasd.push_back(zero4d);
+	gammasd_dot.push_back(zero4d);
+	etas.push_back(zero4d);
+	efs.push_back(zero4d);
+	efs_prev.push_back(zero4d);
+	efs_int.push_back(zero4d);
+	sigmaf.push_back(zero4d);
+	uauxs.push_back(zero4d);
+	ufs.push_back(zero4d);
+	ufs_prev.push_back(zero4d);
+	ufs_int.push_back(zero4d);
+	omegafu.push_back(zero4d);
+	qfu_dot.push_back(zero4d);
+	qfu_dot_prev.push_back(zero4d);
+	qfu.push_back(identity);
+	qfs.push_back(identity);
+	qfs_conj.push_back(identity);
+	qdfs.push_back(identity);
+
+	k.push_back(zero4d);
+	k.back() << 0.00001, 0.00001, 0.00001, 0.00001;
+	kappa1.push_back(zero4d);
+	kappa1.back() << 0.1, 0.1, 0.1, 0.1; 
+	kappa2.push_back(zero4d);
+	kappa2.back() << 0.00001, 0.00001, 0.00001, 0.00001; 
+
       }
     }
 
     void control_callback(){
       for (int i = 0; i < num_drones; i++){
 	// Calculate gammas and lambdas
-	lambdas.col(i) = dfs.col(i) - dl; // Both are [0, x, y, z]^T
-	lambdas_dot.col(i) = vfs.col(i) - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
-	gammas.col(i) = kronecker(kronecker(ql, lambdas.col(i)), ql_conj); 
-	gammas_dot.col(i) = cross4(omegal, gammas.col(i)) + kronecker(kronecker(ql, lambdas_dot.col(i)), ql_conj);
+	lambdas[i] = dfs[i] - dl; // Both are [0, x, y, z]^T
+	lambdas_dot[i] = vfs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
+	gammas[i] = kronecker(kronecker(ql, lambdas[i]), ql_conj); 
+	//std::cout << "Gammas num " << i << ": " << gammas[i](0) << ", " << gammas[i](1) << ", " << gammas[i](2) << ", " << gammas[i](3) << std::endl;
+	gammas_dot[i] = cross4(omegal, gammas[i]) + kronecker(kronecker(ql, lambdas_dot[i]), ql_conj);
+	//std::cout << "Gammas_dot num " << i << ": " << gammas_dot[i](0) << ", " << gammas_dot[i](1) << ", " << gammas_dot[i](2) << ", " << gammas_dot[i](3) << std::endl;
 
 	// Calculate errors and etas
-	//etas.col(i) = qlm(qfs_conj.col(i), kronecker(ql, qdfs.col(i)));
-	etas.col(i) = qlm(kronecker(qfs_conj.col(i), kronecker(ql, qdfs.col(i))));
+	//etas[i] = qlm(qfs_conj[i], kronecker(ql, qdfs[i]));
+	etas[i] = qlm(kronecker(qfs_conj[i], kronecker(ql, qdfs[i])));
 	// Fill efs elementwise
-	efs(0, i) = gammasd(1, i) - gammas(1, i);
+	/*efs(0, i) = gammasd(1, i) - gammas(1, i);
 	efs(1, i) = gammasd(2, i) - gammas(2, i);
 	efs(2, i) = gammasd(3, i) - gammas(3, i);
-	efs(3, i) = etas(3, i);
+	efs(3, i) = etas(3, i);*/
+	efs[i](0) = gammasd[i](1) - gammas[i](1);
+	efs[i](1) = gammasd[i](2) - gammas[i](2);
+	efs[i](2) = gammasd[i](3) - gammas[i](3);
+	efs[i](3) = etas[i](3);
+	//std::cout << "Efs num " << i << ": " << efs[i](0) << ", " << efs[i](1) << ", " << efs[i](2) << ", " << efs[i](3) << std::endl;
 
 	// Compute sliding surface
 	// efs trapezoidal integral
-	efs_int.col(i) += 0.5*(efs.col(i) + efs_prev.col(i));
-	efs_prev.col(i) = efs.col(i);
+	efs_int[i] += 0.5*(efs[i] + efs_prev[i]);
+	efs_prev[i] = efs[i];
 
-	sigmaf.col(i) = efs.col(i) + k.col(i).cwiseProduct(efs_int.col(i));
+	//sigmaf[i] = efs[i] + k[i].cwiseProduct(efs_int[i]);
+	sigmaf[i] << efs[i];
 	
 	// Compute auxiliar control output (Continuous non-adaptive smc)
-	uauxs.col(i) = -kappa1.col(i).cwiseProduct(sig(sigmaf.col(i), 0.5)) - kappa2.col(i).cwiseProduct(sigmaf.col(i));
+	//uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
+	uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
+	std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
+	std::cout << "Uauxs num " << i << ": " << uauxs[i] << std::endl;
+	std::cout << "Efs num " << i << ": " << efs[i] << std::endl;
+	//uauxs[i] << 0.001, 0, 0, 0;
+	//std::cout << "Uauxs num " << i << ": " << uauxs[i](0) << ", " << uauxs[i](1) << ", " << uauxs[i](2) << ", " << uauxs[i](3) << std::endl;
 	
 	// Epitelos, compute total control output
-	Eigen::Vector4d c13 = k.col(i).cwiseProduct(efs.col(i)) + uauxs.col(i);
+	//Eigen::Vector4d c13 = k[i].cwiseProduct(efs[i]) + uauxs[i];
+	//Eigen::Vector4d c13 = k[i].cwiseProduct(efs[i]) - uauxs[i];
+	Eigen::Vector4d c13 = -uauxs[i]; 
 	Eigen::Vector4d v13;
 	v13(0) = 0;
 	v13(1) = vl(0);
 	v13(2) = vl(1);
 	v13(3) = vl(2);
 	// Reorder elements for quaternion multiplication
-	omegafu(3, i) = c13(3);
+	//omegafu(3, i) = c13(3);
+	omegafu[i](3) = c13(3);
         c13(3) = c13(2);
 	c13(2) = c13(1);
 	c13(1) = c13(0);
 	c13(0) = 0;
+	// C13 should be [0, x, y, z]^T
 	// Bullshit term because Eigen .col() is trash
 	Eigen::Vector4d bullshit;
-	bullshit = gammas_dot.col(i) + c13 - cross4(omegal, gammas.col(i));
-	//ufs.col(i) = kronecker(kronecker(qfs_conj.col(i), v13 + kronecker(kronecker( ql_conj, gammas_dot.col(i) + c13 - cross4(omegal, gammas.col(i))), ql)), qfs.col(i));
-	ufs.col(i) = kronecker(kronecker(qfs_conj.col(i), v13 + kronecker(kronecker( ql_conj, bullshit ), ql)), qfs.col(i));
+	Eigen::Vector4d bullshit2;
+	bullshit  << 0, 0, 0, 0;
+	bullshit2 << 0, 0, 0, 0;
+	/*std::cout << "PREPRINT" << std::endl;
+	std::cout << "Bullshit num " << i << ": " << bullshit(0) << ", " << bullshit(1) << ", " << bullshit(2) << ", " << bullshit(3) << std::endl;
+	std::cout << "Cross4 num " << i << ": " << cross4(omegal, gammas[i]) << std::endl; 
+	std::cout << "C13 num " << i << ": " << c13(0) << ", " << c13(1) << ", " << c13(2) << ", " << c13(3) << std::endl;
+	std::cout << "Gammas_dot num " << i << ": " << gammas_dot[i](0) << ", " << gammas_dot[i](1) << ", " << gammas_dot[i](2) << ", " << gammas_dot[i](3) << std::endl;
+	std::cout << "Bullshit num " << i << ": " << bullshit(0) << ", " << bullshit(1) << ", " << bullshit(2) << ", " << bullshit(3) << std::endl;
+	std::cout << "Putain de merde" << gammas_dot[i] + c13 << std::endl;
+	std::cout << "Putain de merde2" << cross4(omegal, gammas[i]) << std::endl;*/
+	bullshit << gammasd_dot[i] + c13 - cross4(omegal, gammas[i]);
+	/*std::cout << "Bullshit num " << i << ": " << bullshit(0) << ", " << bullshit(1) << ", " << bullshit(2) << ", " << bullshit(3) << std::endl;
+	std::cout << "Cross4 num " << i << ": " << cross4(omegal, gammas[i])(0) << ", " << cross4(omegal, gammas[i])(1) << ", " << cross4(omegal, gammas[i])(2) << ", " << cross4(omegal, gammas[i])(3) << std::endl;
+	std::cout << "C13 num " << i << ": " << c13(0) << ", " << c13(1) << ", " << c13(2) << ", " << c13(3) << std::endl;
+	std::cout << "Gammas_dot num " << i << ": " << gammas_dot[i](0) << ", " << gammas_dot[i](1) << ", " << gammas_dot[i](2) << ", " << gammas_dot[i](3) << std::endl;
+	std::cout << "Bullshit num " << i << ": " << bullshit(0) << ", " << bullshit(1) << ", " << bullshit(2) << ", " << bullshit(3) << std::endl;
+	std::cout << "POSTPRINT" << std::endl;*/
+	bullshit2 = v13 + kronecker(kronecker( ql_conj, bullshit ), ql);
+	//ufs[i] = kronecker(kronecker(qfs_conj[i], v13 + kronecker(kronecker( ql_conj, gammas_dot[i] + c13 - cross4(omegal, gammas[i])), ql)), qfs[i]);
+	//std::cout << "Bullshit num " << i << ": " << bullshit << std::endl;
+	//std::cout << "Bullshit2 num " << i << ": " << bullshit2 << std::endl;
+	ufs[i] = kronecker(kronecker(qfs_conj[i], bullshit2), qfs[i]);
+	//std::cout << "Ufs num " << i << ": " << ufs[i] << std::endl; 
 	// Ufs should be [0, x, y, z]^T
 	// Map omegafu to qfu_dot, then trapezoidal integral
-	qfu_dot.col(i) = 0.5*kronecker(qfu.col(i), omegafu.col(i));
-	qfu.col(i) += 0.5*(qfu_dot.col(i) + qfu_dot_prev.col(i));
-	qfu_dot_prev.col(i) = qfu_dot.col(i);
+	qfu_dot[i] = 0.5*kronecker(qfu[i], omegafu[i]);
+	qfu[i] += 0.5*(qfu_dot[i] + qfu_dot_prev[i]);
+	qfu_dot_prev[i] = qfu_dot[i];
 
 	// ufs trapezoidal integral
-	ufs_int.col(i) += 0.5*(ufs.col(i) + ufs_prev.col(i));
-	ufs_prev.col(i) = ufs.col(i);
+	ufs_int[i] += 0.5*(ufs[i] + ufs_prev[i]);
+	ufs_prev[i] = ufs[i];
+	
+	//std::cout << "Ufs int num " << i << ": " << ufs_int[i] << std::endl;
 
 	// Publish integrals
-	follower_pose_msgs[i].pose.position.x = ufs_int(1, i);
+	/*follower_pose_msgs[i].pose.position.x = ufs_int(1, i);
 	follower_pose_msgs[i].pose.position.y = ufs_int(2, i);
 	follower_pose_msgs[i].pose.position.z = ufs_int(3, i);
 	follower_pose_msgs[i].pose.orientation.w = qfu(0, i);
 	follower_pose_msgs[i].pose.orientation.x = qfu(1, i);
 	follower_pose_msgs[i].pose.orientation.y = qfu(2, i);
-	follower_pose_msgs[i].pose.orientation.z = qfu(3, i);
+	follower_pose_msgs[i].pose.orientation.z = qfu(3, i);*/
+	follower_pose_msgs[i].pose.position.x = ufs_int[i](1);
+	follower_pose_msgs[i].pose.position.y = ufs_int[i](2);
+	follower_pose_msgs[i].pose.position.z = ufs_int[i](3);
+	follower_pose_msgs[i].pose.orientation.w = qfu[i](0);
+	follower_pose_msgs[i].pose.orientation.x = qfu[i](1);
+	follower_pose_msgs[i].pose.orientation.y = qfu[i](2);
+	follower_pose_msgs[i].pose.orientation.z = qfu[i](3);
 
 	// Leave velocity as zero for now
 
@@ -234,14 +323,14 @@ class TrafficControl : public rclcpp::Node{
 	follower_vel_msgs[i].header.frame_id = "world";
 
 	follower_pose_publishers[i]->publish(follower_pose_msgs[i]);
-	follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
+	//follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
       
       }
     }
 
     void follower_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg, int i){
       // Get follower position and quaternion
-      dfs(1, i) = msg->pose.position.x;
+      /*dfs(1, i) = msg->pose.position.x;
       dfs(2, i) = msg->pose.position.y;
       dfs(3, i) = msg->pose.position.z;
       qfs(0, i) = msg->pose.orientation.w;
@@ -251,14 +340,30 @@ class TrafficControl : public rclcpp::Node{
       qfs_conj(0, i) = qfs(0, i);
       qfs_conj(1, i) = -qfs(1, i);
       qfs_conj(2, i) = -qfs(2, i);
-      qfs_conj(3, i) = -qfs(3, i);
+      qfs_conj(3, i) = -qfs(3, i);*/
+      dfs[i](1) = msg->pose.position.x;
+      dfs[i](2) = msg->pose.position.y;
+      dfs[i](3) = msg->pose.position.z;
+      qfs[i](0) = msg->pose.orientation.w;
+      qfs[i](1) = msg->pose.orientation.x;
+      qfs[i](2) = msg->pose.orientation.y;
+      qfs[i](3) = msg->pose.orientation.z;
+      qfs_conj[i](0) = qfs[i](0);
+      qfs_conj[i](1) = -qfs[i](1);
+      qfs_conj[i](2) = -qfs[i](2);
+      qfs_conj[i](3) = -qfs[i](3);
+      //std::cout << "dfs num " << i << ": " << dfs[i](1) << ", " << dfs[i](2) << ", " << dfs[i](3) << std::endl;
     }
     void follower_vel_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg, int i){
       // Get follower velocity
-      vfs(0, i) = msg->twist.linear.x;
+      /*vfs(0, i) = msg->twist.linear.x;
       vfs(1, i) = msg->twist.linear.y;
       vfs(2, i) = msg->twist.linear.z;
-      vfs(3, i) = msg->twist.angular.z;
+      vfs(3, i) = msg->twist.angular.z;*/
+      vfs[i](0) = msg->twist.linear.x;
+      vfs[i](1) = msg->twist.linear.y;
+      vfs[i](2) = msg->twist.linear.z;
+      vfs[i](3) = msg->twist.angular.z;
     }
     void leader_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
       // Get leader position and quaternion
@@ -277,13 +382,21 @@ class TrafficControl : public rclcpp::Node{
     void formation_definition_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg){
       // Get formation definition
       for (int i = 0; i < num_drones; i++){
-	gammasd(1, i) = msg->poses[i].position.x;
+	/*gammasd(1, i) = msg->poses[i].position.x;
 	gammasd(2, i) = msg->poses[i].position.y;
 	gammasd(3, i) = msg->poses[i].position.z;
 	qdfs(0, i)    = msg->poses[i].orientation.w;
 	qdfs(1, i)    = msg->poses[i].orientation.x;
 	qdfs(2, i)    = msg->poses[i].orientation.y;
-	qdfs(3, i)    = msg->poses[i].orientation.z;
+	qdfs(3, i)    = msg->poses[i].orientation.z;*/
+	gammasd[i](1) = msg->poses[i].position.x;
+	gammasd[i](2) = msg->poses[i].position.y;
+	gammasd[i](3) = msg->poses[i].position.z;
+	qdfs[i](0)    = msg->poses[i].orientation.w;
+	qdfs[i](1)    = msg->poses[i].orientation.x;
+	qdfs[i](2)    = msg->poses[i].orientation.y;
+	qdfs[i](3)    = msg->poses[i].orientation.z;
+	//std::cout << "Gammasd num " << i << ": " << gammasd[i](1) << ", " << gammasd[i](2) << ", " << gammasd[i](3) << std::endl;
       }
     }
 
@@ -297,33 +410,33 @@ class TrafficControl : public rclcpp::Node{
     Eigen::Vector4d              ql_conj;          // Leader quaternion conjugate [w, -x, -y, -z]^T
     Eigen::Vector4d              ql_dot;           // Leader quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T
     Eigen::Vector4d              omegal;           // Leader angular velocity [0, x_dot, y_dot, z_dot]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qfs;         // Followers quaternions [w, x, y, z]^T 
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qfs_conj;	  // Followers quaternions conjugate [w, -x, -y, -z]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> dfs;         // World positions of the followers
-    Eigen::Matrix<double, 4, Eigen::Dynamic> vfs;         // World velocities of the followers [x_dot, y_dot, z_dot, yaw_dot]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> gammas;      // Follower position with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> gammas_dot;  // Follower velocity with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> lambdas;     // Follower position with respect to the leader (World)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> lambdas_dot; // Follower velocity with respect to the leader (World)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> gammasd;     // Desired follower position with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> gammasd_dot; // Desired follower velocity with respect to the leader (Body)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qdfs;        // Desired follower quaternion with respect to the leader
-    Eigen::Matrix<double, 4, Eigen::Dynamic> etas;        // QLM of the followers
-    Eigen::Matrix<double, 4, Eigen::Dynamic> efs;         // Formation error [x, y, z, qlm(3)]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> efs_prev;    // Formation error previous
-    Eigen::Matrix<double, 4, Eigen::Dynamic> efs_int;     // Formation error integral
-    Eigen::Matrix<double, 4, Eigen::Dynamic> k;           // Formation sliding gain [kx, ky, kz, kpsi]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> kappa1;      // Formation constant effort gain
-    Eigen::Matrix<double, 4, Eigen::Dynamic> kappa2;      // Formation smooth effort gain
-    Eigen::Matrix<double, 4, Eigen::Dynamic> sigmaf;      // Formation sliding surface 
-    Eigen::Matrix<double, 4, Eigen::Dynamic> uauxs;       // Formation auxiliar control output
-    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs;         // Formation control output
-    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs_prev;    // Formation control output previous
-    Eigen::Matrix<double, 4, Eigen::Dynamic> ufs_int;     // Formation control output integral [x, y, z, psi]^T (Psi unused)
-    Eigen::Matrix<double, 4, Eigen::Dynamic> omegafu;     // Formation output angular velocity [0, 0, 0, ufs(4)]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qfu;         // Formation output quaternion [w, x, y, z]^T
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qfu_dot;     // Formation output quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T 
-    Eigen::Matrix<double, 4, Eigen::Dynamic> qfu_dot_prev;// Formation output quaternion derivative previous 
+    std::vector<Eigen::Vector4d> qfs;         // Followers quaternions [w, x, y, z]^T 
+    std::vector<Eigen::Vector4d> qfs_conj;	  // Followers quaternions conjugate [w, -x, -y, -z]^T
+    std::vector<Eigen::Vector4d> dfs;         // World positions of the followers
+    std::vector<Eigen::Vector4d> vfs;         // World velocities of the followers [x_dot, y_dot, z_dot, yaw_dot]^T
+    std::vector<Eigen::Vector4d> gammas;      // Follower position with respect to the leader (Body)
+    std::vector<Eigen::Vector4d> gammas_dot;  // Follower velocity with respect to the leader (Body)
+    std::vector<Eigen::Vector4d> lambdas;     // Follower position with respect to the leader (World)
+    std::vector<Eigen::Vector4d> lambdas_dot; // Follower velocity with respect to the leader (World)
+    std::vector<Eigen::Vector4d> gammasd;     // Desired follower position with respect to the leader (Body)
+    std::vector<Eigen::Vector4d> gammasd_dot; // Desired follower velocity with respect to the leader (Body)
+    std::vector<Eigen::Vector4d> qdfs;        // Desired follower quaternion with respect to the leader
+    std::vector<Eigen::Vector4d> etas;        // QLM of the followers
+    std::vector<Eigen::Vector4d> efs;         // Formation error [x, y, z, qlm(3)]^T
+    std::vector<Eigen::Vector4d> efs_prev;    // Formation error previous
+    std::vector<Eigen::Vector4d> efs_int;     // Formation error integral
+    std::vector<Eigen::Vector4d> k;           // Formation sliding gain [kx, ky, kz, kpsi]^T
+    std::vector<Eigen::Vector4d> kappa1;      // Formation constant effort gain
+    std::vector<Eigen::Vector4d> kappa2;      // Formation smooth effort gain
+    std::vector<Eigen::Vector4d> sigmaf;      // Formation sliding surface 
+    std::vector<Eigen::Vector4d> uauxs;       // Formation auxiliar control output
+    std::vector<Eigen::Vector4d> ufs;         // Formation control output
+    std::vector<Eigen::Vector4d> ufs_prev;    // Formation control output previous
+    std::vector<Eigen::Vector4d> ufs_int;     // Formation control output integral [x, y, z, psi]^T (Psi unused)
+    std::vector<Eigen::Vector4d> omegafu;     // Formation output angular velocity [0, 0, 0, ufs(4)]^T
+    std::vector<Eigen::Vector4d> qfu;         // Formation output quaternion [w, x, y, z]^T
+    std::vector<Eigen::Vector4d> qfu_dot;     // Formation output quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T 
+    std::vector<Eigen::Vector4d> qfu_dot_prev;// Formation output quaternion derivative previous 
 
     std::vector<geometry_msgs::msg::PoseStamped> follower_pose_msgs; // For publishing
     std::vector<geometry_msgs::msg::TwistStamped> follower_vel_msgs; // For publishing
