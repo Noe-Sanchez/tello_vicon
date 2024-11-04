@@ -102,6 +102,8 @@ class TrafficControl : public rclcpp::Node{
 
       // Formation definition subscriber
       formation_definition_subscription = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation_definition", 10, std::bind(&TrafficControl::formation_definition_callback, this, std::placeholders::_1));
+      // Leader pose subscriber
+      leader_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_leader/tello/estimator/pose", 10, std::bind(&TrafficControl::leader_pose_callback, this, std::placeholders::_1));
       
       // Make 0.5s timer
       control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
@@ -206,8 +208,10 @@ class TrafficControl : public rclcpp::Node{
     void control_callback(){
       for (int i = 0; i < num_drones; i++){
 	// Calculate gammas and lambdas
-	lambdas[i] = dfs[i] - dl; // Both are [0, x, y, z]^T
-	lambdas_dot[i] = vfs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
+	//lambdas[i] = dfs[i] - dl; // Both are [0, x, y, z]^T
+	//lambdas_dot[i] = vfs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
+	lambdas[i] = ufs_int[i] - dl; // Both are [0, x, y, z]^T
+	lambdas_dot[i] = ufs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
 	gammas[i] = kronecker(kronecker(ql, lambdas[i]), ql_conj); 
 	//std::cout << "Gammas num " << i << ": " << gammas[i](0) << ", " << gammas[i](1) << ", " << gammas[i](2) << ", " << gammas[i](3) << std::endl;
 	gammas_dot[i] = cross4(omegal, gammas[i]) + kronecker(kronecker(ql, lambdas_dot[i]), ql_conj);
