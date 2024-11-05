@@ -194,6 +194,7 @@ class TrafficControl : public rclcpp::Node{
 	qfs.push_back(identity);
 	qfs_conj.push_back(identity);
 	qdfs.push_back(identity);
+	qfu_conj.push_back(identity);
 
 	k.push_back(zero4d);
 	k.back() << 0.00001, 0.00001, 0.00001, 0.00001;
@@ -219,7 +220,16 @@ class TrafficControl : public rclcpp::Node{
 
 	// Calculate errors and etas
 	//etas[i] = qlm(qfs_conj[i], kronecker(ql, qdfs[i]));
-	etas[i] = qlm(kronecker(qfs_conj[i], kronecker(ql, qdfs[i])));
+	Eigen::Vector4d eta_norm;
+	eta_norm << 0, 0, 0, 0;
+	//eta_norm = kronecker(qfs_conj[i], kronecker(ql, qdfs[i]));
+	//eta_norm = kronecker(qfu[i], kronecker(ql, qdfs[i]));
+	eta_norm = kronecker(qfu_conj[i], kronecker(ql, qdfs[i]));
+	etas[i] = eta_norm / eta_norm.norm();
+	etas[i] = qlm(etas[i]);
+	std::cout << "Etas num " << i << ": " << etas[i](0) << ", " << etas[i](1) << ", " << etas[i](2) << ", " << etas[i](3) << std::endl;
+
+	//etas[i] = qlm(kronecker(qfs_conj[i], kronecker(ql, qdfs[i])));
 	// Fill efs elementwise
 	/*efs(0, i) = gammasd(1, i) - gammas(1, i);
 	efs(1, i) = gammasd(2, i) - gammas(2, i);
@@ -242,9 +252,9 @@ class TrafficControl : public rclcpp::Node{
 	// Compute auxiliar control output (Continuous non-adaptive smc)
 	//uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
 	uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
-	std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
-	std::cout << "Uauxs num " << i << ": " << uauxs[i] << std::endl;
-	std::cout << "Efs num " << i << ": " << efs[i] << std::endl;
+	//std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
+	//std::cout << "Uauxs num " << i << ": " << uauxs[i] << std::endl;
+	//std::cout << "Efs num " << i << ": " << efs[i] << std::endl;
 	//uauxs[i] << 0.001, 0, 0, 0;
 	//std::cout << "Uauxs num " << i << ": " << uauxs[i](0) << ", " << uauxs[i](1) << ", " << uauxs[i](2) << ", " << uauxs[i](3) << std::endl;
 	
@@ -259,7 +269,8 @@ class TrafficControl : public rclcpp::Node{
 	v13(3) = vl(2);
 	// Reorder elements for quaternion multiplication
 	//omegafu(3, i) = c13(3);
-	omegafu[i](3) = c13(3);
+	omegafu[i](3) = -c13(3);
+	std::cout << "Omegafu num " << i << ": " << omegafu[i] << std::endl;
         c13(3) = c13(2);
 	c13(2) = c13(1);
 	c13(1) = c13(0);
@@ -289,13 +300,25 @@ class TrafficControl : public rclcpp::Node{
 	//ufs[i] = kronecker(kronecker(qfs_conj[i], v13 + kronecker(kronecker( ql_conj, gammas_dot[i] + c13 - cross4(omegal, gammas[i])), ql)), qfs[i]);
 	//std::cout << "Bullshit num " << i << ": " << bullshit << std::endl;
 	//std::cout << "Bullshit2 num " << i << ": " << bullshit2 << std::endl;
-	ufs[i] = kronecker(kronecker(qfs_conj[i], bullshit2), qfs[i]);
+	//ufs[i] = kronecker(kronecker(qfs_conj[i], bullshit2), qfs[i]);
+	
+	//ufs[i] = kronecker(kronecker(qfu_conj[i], bullshit2), qfu[i]);
+	ufs[i] << bullshit2;
+
 	//std::cout << "Ufs num " << i << ": " << ufs[i] << std::endl; 
 	// Ufs should be [0, x, y, z]^T
 	// Map omegafu to qfu_dot, then trapezoidal integral
 	qfu_dot[i] = 0.5*kronecker(qfu[i], omegafu[i]);
 	qfu[i] += 0.5*(qfu_dot[i] + qfu_dot_prev[i]);
+
+	// Normalize qfu
+	qfu[i] = qfu[i] / qfu[i].norm();
+
 	qfu_dot_prev[i] = qfu_dot[i];
+	qfu_conj[i](0) = qfu[i](0);
+	qfu_conj[i](1) = -qfu[i](1);
+	qfu_conj[i](2) = -qfu[i](2);
+	qfu_conj[i](3) = -qfu[i](3);
 
 	// ufs trapezoidal integral
 	ufs_int[i] += 0.5*(ufs[i] + ufs_prev[i]);
@@ -441,6 +464,7 @@ class TrafficControl : public rclcpp::Node{
     std::vector<Eigen::Vector4d> qfu;         // Formation output quaternion [w, x, y, z]^T
     std::vector<Eigen::Vector4d> qfu_dot;     // Formation output quaternion derivative [w_dot, x_dot, y_dot, z_dot]^T 
     std::vector<Eigen::Vector4d> qfu_dot_prev;// Formation output quaternion derivative previous 
+    std::vector<Eigen::Vector4d> qfu_conj;    // Formation output quaternion conjugate [w, -x, -y, -z]^T
 
     std::vector<geometry_msgs::msg::PoseStamped> follower_pose_msgs; // For publishing
     std::vector<geometry_msgs::msg::TwistStamped> follower_vel_msgs; // For publishing
