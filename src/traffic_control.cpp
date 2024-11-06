@@ -28,7 +28,7 @@ Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::Vector4d b){
   return c;
 }
 
-Eigen::Vector4d sig(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr v, double exponent){
+/*Eigen::Vector4d sig(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr v, double exponent){
   Eigen::Vector4d s;
   s(0) = v(0);
   s(1) = v(1);
@@ -48,10 +48,10 @@ Eigen::Vector4d sig(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr v, d
 		  }
 
         return s;
-}
+}*/
 
 // Quick and dirty quaternion multiplication for matrix slices
-Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr p){
+/*Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr p){
   Eigen::Matrix4d q_matrix;
   Eigen::Vector4d p_vector;
 
@@ -90,7 +90,7 @@ Eigen::Vector4d kronecker(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXp
 	p_vector = q_matrix * p;
 
 	return p_vector;
-}
+}*/
 
 
 class TrafficControl : public rclcpp::Node{
@@ -246,12 +246,12 @@ class TrafficControl : public rclcpp::Node{
 	efs_int[i] += 0.5*(efs[i] + efs_prev[i]);
 	efs_prev[i] = efs[i];
 
-	//sigmaf[i] = efs[i] + k[i].cwiseProduct(efs_int[i]);
-	sigmaf[i] << efs[i];
+	sigmaf[i] = efs[i] + k[i].cwiseProduct(efs_int[i]);
+	//sigmaf[i] << efs[i];
 	
 	// Compute auxiliar control output (Continuous non-adaptive smc)
-	//uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
-	uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
+	uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
+	//uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
 	//std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
 	//std::cout << "Uauxs num " << i << ": " << uauxs[i] << std::endl;
 	//std::cout << "Efs num " << i << ": " << efs[i] << std::endl;
@@ -304,6 +304,11 @@ class TrafficControl : public rclcpp::Node{
 	
 	//ufs[i] = kronecker(kronecker(qfu_conj[i], bullshit2), qfu[i]);
 	ufs[i] << bullshit2;
+	// Saturate ufs
+	ufs[i](0) = std::min(std::max(ufs[i](0), -1.6), 1.6);
+	ufs[i](1) = std::min(std::max(ufs[i](1), -1.6), 1.6);
+	ufs[i](2) = std::min(std::max(ufs[i](2), -1.0), 1.0);
+	ufs[i](3) = std::min(std::max(ufs[i](3), -1.0), 1.0);
 
 	//std::cout << "Ufs num " << i << ": " << ufs[i] << std::endl; 
 	// Ufs should be [0, x, y, z]^T

@@ -44,7 +44,9 @@ class AsmcController : public rclcpp::Node{
       // Initialize variables 
       //zetta << 1, 1, 1, 4;
       zetta << 3.45, 3.45, 4.25, 4;
-      lambda << 1.1, 1.1, 1.2, 1;
+      //lambda << 1.1, 1.1, 1.2, 1;
+      //lambda << 1.1, 1.1, 1.2, 1.6;
+      lambda << 1.1, 1.1, 1.2, 4.6;
       alpha << 0.001, 0.001, 0.001, 0.001;
       beta << 0.01, 0.01, 0.01, 0.01;
 

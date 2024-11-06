@@ -88,7 +88,10 @@ class SimpleDynamics : public rclcpp::Node{
       //p = p + 0.01 * p_dot;
       p = p + 0.01 * p_dot_rot3;
 
+      // Integral of quaternion
       q = q + 0.01 * (0.5 * kronecker(q, q_dot));
+      // Normalize q
+      q = q / q.norm();
       //q = q + 0.01 * (0.5 * kronecker(q, q_dot_rot));
 
       // Publish states
