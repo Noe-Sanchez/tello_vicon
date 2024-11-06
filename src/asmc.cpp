@@ -6,6 +6,7 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
 #include <math.h>
+#include "mrsl_math.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -13,144 +14,6 @@
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
 using namespace std::chrono_literals;
-
-double sig(double x, double exponent){
-  double s;
-
-  if (x > 0){
-    s = 1;
-  } else if (x < 0){
-    s = -1;
-  } else {
-    s = 0;
-  }
-
-  s = pow(abs(x), exponent) * s;
-
-  return s;
-}
-
-template <typename VectorType>
-VectorType sig(VectorType v, double exponent){
-  VectorType s;
-
-  for (int i = 0; i < v.size(); i++){
-    if (v(i) > 0){
-      s(i) = 1;
-    } else if (v(i) < 0){
-      s(i) = -1;
-    } else {
-      s(i) = 0;
-    }
-
-    s(i) = pow(abs(v(i)), exponent) * s(i);
-  }
-
-  return s;
-}
-
-template <typename VectorType>
-VectorType sig(VectorType v, VectorType exponent){
-  VectorType s;
-
-  for (int i = 0; i < v.size(); i++){
-    if (v(i) > 0){
-      s(i) = 1;
-    } else if (v(i) < 0){
-      s(i) = -1;
-    } else {
-      s(i) = 0;
-    }
-
-    s(i) = pow(abs(v(i)), exponent(i)) * s(i);
-  }
-
-  return s;
-}
-
-Eigen::Vector4d ewise(Eigen::Vector4d v1, Eigen::Vector4d v2){
-  Eigen::Vector4d v;
-
-  for (int i = 0; i < 4; i++){
-    v(i) = v1(i) * v2(i);
-  }
-
-  return v;
-}
-
-Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector4d p){
-  Eigen::Matrix4d q_matrix;
-  Eigen::Vector4d p_vector;
-
-  q_matrix << q(0), -q(1), -q(2), -q(3),
-              q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
-
-  p_vector = q_matrix * p;
-
-  return p_vector;
-}
-
-Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::Vector3d p){
-  Eigen::Matrix4d q_matrix;
-  Eigen::Vector4d p_vector;
-
-  p_vector << 0, p(0), p(1), p(2);
-
-  q_matrix << q(0), -q(1), -q(2), -q(3),
-	            q(1),  q(0), -q(3),  q(2),
-	            q(2),  q(3),  q(0), -q(1),
-	            q(3), -q(2),  q(1),  q(0);
-	      
-  p_vector = q_matrix * p_vector;
-  
-  return p_vector;
-}
-
-Eigen::Vector4d qlm(Eigen::Vector4d q){
-  Eigen::Vector4d q_log;
-
-  //double norm = sqrt(q(0)*q(0) + q(1)*q(1) + q(2)*q(2) + q(3)*q(3));
-  double norm = sqrt(q(1)*q(1) + q(2)*q(2) + q(3)*q(3));
-
-  if (norm < 0.01){
-    q_log << 0, 0, 0, 0;
-  } else {
-    // Use arccos to get the angle
-    q_log << 0, q(1)/norm, q(2)/norm, q(3)/norm;
-    if (q(0) > 1){
-      q(0) = 1;
-    } else if (q(0) < -1){
-      q(0) = -1;
-    }
-    double acosaux = acos(q(0)) < acos(-q(0)) ? acos(q(0)) : acos(-q(0));
-    //q_log = acos(q(0)) * q_log;
-    q_log = acosaux * q_log;
-  }
-
-  return 2*q_log;
-}
-
-Eigen::Vector4d exp4(Eigen::Vector4d v, double exponent){
-  Eigen::Vector4d v_exp;
-
-  for (int i = 0; i < 4; i++){
-    v_exp(i) = pow(v(i), exponent);
-  }
-
-  return v_exp;
-}
-
-Eigen::Vector4d sqrt4(Eigen::Vector4d v){
-  Eigen::Vector4d s;
-
-  for (int i = 0; i < 4; i++){
-    s(i) = sqrt(v(i));
-  }
-
-  return s;
-}
 
 class AsmcController : public rclcpp::Node{
   public:
@@ -181,7 +44,9 @@ class AsmcController : public rclcpp::Node{
       // Initialize variables 
       //zetta << 1, 1, 1, 4;
       zetta << 3.45, 3.45, 4.25, 4;
-      lambda << 1.1, 1.1, 1.2, 1;
+      //lambda << 1.1, 1.1, 1.2, 1;
+      //lambda << 1.1, 1.1, 1.2, 1.6;
+      lambda << 1.1, 1.1, 1.2, 4.6;
       alpha << 0.001, 0.001, 0.001, 0.001;
       beta << 0.01, 0.01, 0.01, 0.01;
 
@@ -205,6 +70,19 @@ class AsmcController : public rclcpp::Node{
       K_dot      << 0, 0, 0, 0;
       sigma      << 0, 0, 0, 0;
       uaux       << 0, 0, 0, 0;
+      u          << 0, 0, 0, 0;
+      u_int      << 0, 0, 0, 0;
+      u_prev     << 0, 0, 0, 0;
+      u_t        << 0, 0, 0, 0;
+
+      // 7.321 x 10^-5 kg m^2
+      Ixx = 0.00007321;
+      Iyy = 0.00013604;
+      Izz = 0.00007317;
+
+      J << Ixx, 0, 0,
+	    0, Iyy, 0,
+	    0, 0, Izz;
 
       reference_pose.pose.position.x = (double)drone_id; 
       reference_pose.pose.position.y = 0;
@@ -298,7 +176,9 @@ class AsmcController : public rclcpp::Node{
 
       // Control law 
       //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5; //Original
-      uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      uaux << -1 * ewise(zetta, e) - 1 * ewise(lambda, e_dot);
+      //uaux << ewise(e, zetta); 
               
       // Original feedback linearization
       /*u_rot << 0,
@@ -315,34 +195,100 @@ class AsmcController : public rclcpp::Node{
                xd_dot(0) -uaux(0)/term1(0),
 	       xd_dot(1) -uaux(1)/term1(1),
 	       xd_dot(2) -uaux(2)/term1(2);*/
+
+      // Attitude term
+      Eigen::Vector3d term2;
+      Eigen::Vector3d OMEGA;
+      Eigen::Matrix3d OMEGA_cross;
+      Eigen::Matrix3d J_inv;
+      J_inv = J.inverse();
+      OMEGA << estimator_velocity.twist.angular.x, estimator_velocity.twist.angular.y, estimator_velocity.twist.angular.z;
+      OMEGA_cross << 0, -OMEGA(2), OMEGA(1),
+	             OMEGA(2), 0, -OMEGA(0),
+	             -OMEGA(1), OMEGA(0), 0;
+      
+      // omega x J omega
+      //std::cout << "Sanity check " <<  J * OMEGA << std::endl;
+      //std::cout << "Sanity check " <<  OMEGA_cross * (J * OMEGA) << std::endl;
+      std::cout << "OMEGA" << OMEGA << std::endl;
+      std::cout << "Sanity check " <<  J_inv * (OMEGA_cross * (J * OMEGA)) << std::endl;
+      term2 = J_inv * (OMEGA_cross * (J * OMEGA)); 
+
+      u << -uaux(0), 
+	   -uaux(1), 
+	   -uaux(2), 
+	   -uaux(3) - term2(2);
+	   //-uaux(3);*/
+
+      // Trapezoidal integral of u
+      u_int += 0.01 * (u + u_prev) / 2;
+      u_prev = u;
+
+
       u_rot << 0,
-               xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
+               /*xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
 	       xd_dot(1) - ewise(ewise(zetta, lambda), uaux)(1)/term1(1),
-	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);
+	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);*/
+               /*-uaux(0),
+	       -uaux(1),
+	       -uaux(2);*/
+               u_int(0),
+	       u_int(1),
+	       u_int(2);
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
+      //u_rot = kronecker(kronecker(q_hat, u_rot), q_hat_conj);
 
       //uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
       //uaux(3) = xd_dot(3) - uaux(3) / term1(3);
-      uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
+      //uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
+      /*u << u_rot(1), 
+	   u_rot(2), 
+	   u_rot(3), 
+	   -uaux(3) + term2(2);
 
-      uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
+      // Trapezoidal integral of u
+      u_int += 0.01 * (u + u_prev) / 2;
+      u_prev = u;*/
+      
+      
+      //std::cout << "u: " << u << std::endl;
+      //std::cout << "u_int: " << u_int << std::endl;
+      /*uaux(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
       uaux(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
       uaux(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
-      uaux(3) = std::min(std::max(uaux(3),  -1.0), 1.0);
+      uaux(3) = std::min(std::max(uaux(3),  -1.0), 1.0);*/
 
+      /*u_t(0) = std::min(std::max(u_int(0), -1.6), 1.6);
+      u_t(1) = std::min(std::max(u_int(1), -1.6), 1.6);
+      u_t(2) = std::min(std::max(u_int(2), -1.0), 1.0);
+      u_t(3) = std::min(std::max(u_int(3), -1.0), 1.0);*/
+      u_t(0) = std::min(std::max(u_rot(1), -1.6), 1.6);
+      u_t(1) = std::min(std::max(u_rot(2), -1.6), 1.6);
+      u_t(2) = std::min(std::max(u_rot(3), -1.0), 1.0);
+      u_t(3) = std::min(std::max(u_int(3), -1.0), 1.0);
 
       // Normalize control output
       
-      uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
+      /*uaux(0) = 100 * (uaux(0) + 1.6)/(3.2) - 50;
       uaux(1) = 100 * (uaux(1) + 1.6)/(3.2) - 50;
       //uaux(2) = 100 * (uaux(2) + 0.9)/(1.9) - 50;
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
-      uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;
+      uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;*/
+      
+      u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
+      u_t(1) = 200 * (u_t(1) + 1.6)/(3.2) - 100;
+      u_t(2) = 200 * (u_t(2) + 1.0)/(2.0) - 100;
+      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;
 
-      _uaux.linear.x =  uaux(0);
+      /*_uaux.linear.x =  uaux(0);
       _uaux.linear.y =  uaux(1);
       _uaux.linear.z =  uaux(2);
-      _uaux.angular.z = uaux(3);
+      _uaux.angular.z = uaux(3);*/
+
+      _uaux.linear.x  = u_t(0);  
+      _uaux.linear.y  = u_t(1); 
+      _uaux.linear.z  = u_t(2); 
+      _uaux.angular.z = u_t(3);
 
       _sigma.linear.x = sigma(0);
       _sigma.linear.y = sigma(1);
@@ -422,8 +368,17 @@ class AsmcController : public rclcpp::Node{
     Eigen::Vector4d sigma;
     Eigen::Vector4d uaux;
     Eigen::Vector4d u_rot;
+    Eigen::Vector4d u;
+    Eigen::Vector4d u_int;
+    Eigen::Vector4d u_t;
+    Eigen::Vector4d u_prev;
+    Eigen::Matrix3d J;
 
     int drone_id;
+
+    float Ixx;
+    float Iyy;
+    float Izz;
 
     std::vector<double> gains;
 
