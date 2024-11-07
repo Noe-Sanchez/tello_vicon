@@ -53,6 +53,7 @@ install(PROGRAMS
   tello_vicon/tello_wrapper.py
   tello_vicon/reference.py
   tello_vicon/multi_reference.py
+  tello_vicon/showtime.py
   tello_vicon/tello_joy.py
   DESTINATION lib/${PROJECT_NAME}
 )

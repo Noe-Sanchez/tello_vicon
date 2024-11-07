@@ -46,7 +46,7 @@ class AsmcController : public rclcpp::Node{
       zetta << 3.45, 3.45, 4.25, 4;
       //lambda << 1.1, 1.1, 1.2, 1;
       //lambda << 1.1, 1.1, 1.2, 1.6;
-      lambda << 1.1, 1.1, 1.2, 4.6;
+      lambda << 3.6, 3.6, 2.2, 6.6;
       alpha << 0.001, 0.001, 0.001, 0.001;
       beta << 0.01, 0.01, 0.01, 0.01;
 
