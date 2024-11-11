@@ -42,7 +42,7 @@ ament_target_dependencies(unity_ui_node rclcpp std_msgs geometry_msgs)
 add_executable(asmc_avoidance_node src/asmc_avoidance.cpp)
 ament_target_dependencies(asmc_avoidance_node rclcpp std_msgs geometry_msgs)
 add_executable(traffic_control_node src/traffic_control.cpp)
-ament_target_dependencies(traffic_control_node rclcpp std_msgs geometry_msgs)
+ament_target_dependencies(traffic_control_node rclcpp std_msgs geometry_msgs tf2_ros)
 
 add_executable(test_node src/test.cpp)
 ament_target_dependencies(test_node rclcpp std_msgs geometry_msgs)
@@ -53,7 +53,10 @@ install(PROGRAMS
   tello_vicon/tello_wrapper.py
   tello_vicon/reference.py
   tello_vicon/multi_reference.py
-  tello_vicon/showtime.py
+  tello_vicon/show_pinwheel.py
+  tello_vicon/show_crystal.py
+  tello_vicon/show_start.py
+  tello_vicon/show_tet.py
   tello_vicon/tello_joy.py
   DESTINATION lib/${PROJECT_NAME}
 )
