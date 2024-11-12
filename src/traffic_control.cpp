@@ -12,7 +12,9 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
+#include <tf2_ros/transform_broadcaster.h>
 
 using namespace std::chrono_literals;
 
@@ -28,71 +30,6 @@ Eigen::Vector4d cross4(Eigen::Vector4d a, Eigen::Vector4d b){
   return c;
 }
 
-/*Eigen::Vector4d sig(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr v, double exponent){
-  Eigen::Vector4d s;
-  s(0) = v(0);
-  s(1) = v(1);
-  s(2) = v(2);
-  s(3) = v(3);
-
-      for (int i = 0; i < v.size(); i++){
-	    if (v(i) > 0){
-	            s(i) = 1;
-		        } else if (v(i) < 0){
-			        s(i) = -1;
-				    } else {
-				            s(i) = 0;
-					        }
-
-	        s(i) = pow(abs(v(i)), exponent) * s(i);
-		  }
-
-        return s;
-}*/
-
-// Quick and dirty quaternion multiplication for matrix slices
-/*Eigen::Vector4d kronecker(Eigen::Vector4d q, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr p){
-  Eigen::Matrix4d q_matrix;
-  Eigen::Vector4d p_vector;
-
-  q_matrix << q(0), -q(1), -q(2), -q(3),
-	      q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
-
-  p_vector = q_matrix * p;
-
-  return p_vector;
-}
-Eigen::Vector4d kronecker(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr q, Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr p){
-  Eigen::Matrix4d q_matrix;
-  Eigen::Vector4d p_vector;
-
-  q_matrix << q(0), -q(1), -q(2), -q(3),
-	      q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
-
-  p_vector = q_matrix * p;
-
-  return p_vector;
-}
-
-Eigen::Vector4d kronecker(Eigen::DenseBase<Eigen::Matrix<double, 4, -1> >::ColXpr q, Eigen::Vector4d p){
-	Eigen::Matrix4d q_matrix;
-	Eigen::Vector4d p_vector;
-
-	q_matrix << q(0), -q(1), -q(2), -q(3),
-	      q(1),  q(0), -q(3),  q(2),
-	      q(2),  q(3),  q(0), -q(1),
-	      q(3), -q(2),  q(1),  q(0);
-
-	p_vector = q_matrix * p;
-
-	return p_vector;
-}*/
-
-
 class TrafficControl : public rclcpp::Node{
   public:
     TrafficControl(): Node("traffic_control_node"){
@@ -101,11 +38,17 @@ class TrafficControl : public rclcpp::Node{
       num_drones = this->get_parameter("num_drones").as_int();
 
       // Formation definition subscriber
-      formation_definition_subscription = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation_definition", 10, std::bind(&TrafficControl::formation_definition_callback, this, std::placeholders::_1));
+      formation_definition_subscription     = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation/definition", 10, std::bind(&TrafficControl::formation_definition_callback, this, std::placeholders::_1));
+      formation_dot_definition_subscription = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation/velocity", 10, std::bind(&TrafficControl::formation_dot_definition_callback, this, std::placeholders::_1));
       // Leader pose subscriber
-      leader_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_leader/tello/estimator/pose", 10, std::bind(&TrafficControl::leader_pose_callback, this, std::placeholders::_1));
+      leader_pose_subscription     = this->create_subscription<geometry_msgs::msg::PoseStamped>("/formation/leader/pose", 10, std::bind(&TrafficControl::leader_pose_callback, this, std::placeholders::_1));
+      leader_velocity_subscription = this->create_subscription<geometry_msgs::msg::TwistStamped>("/formation/leader/velocity", 10, std::bind(&TrafficControl::leader_velocity_callback, this, std::placeholders::_1));
       
+      // Virtual leader transform broadcaster
+      transform_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
       // Make 0.5s timer
+      //control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
       control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
   
       // Initialize variables
@@ -201,7 +144,8 @@ class TrafficControl : public rclcpp::Node{
 	kappa1.push_back(zero4d);
 	kappa1.back() << 0.1, 0.1, 0.1, 0.1; 
 	kappa2.push_back(zero4d);
-	kappa2.back() << 0.00001, 0.00001, 0.00001, 0.00001; 
+	//kappa2.back() << 0.001, 0.001, 0.001, 0.001; 
+	kappa2.back() << 0.0001, 0.0001, 0.0001, 0.0001; 
 
       }
     }
@@ -213,7 +157,8 @@ class TrafficControl : public rclcpp::Node{
 	//lambdas_dot[i] = vfs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
 	lambdas[i] = ufs_int[i] - dl; // Both are [0, x, y, z]^T
 	lambdas_dot[i] = ufs[i] - vl; // Both are [x_dot, y_dot, z_dot, yaw_dot]^T
-	gammas[i] = kronecker(kronecker(ql, lambdas[i]), ql_conj); 
+	//gammas[i] = kronecker(kronecker(ql, lambdas[i]), ql_conj); 
+	gammas[i] = kronecker(kronecker(ql_conj, lambdas[i]), ql); 
 	//std::cout << "Gammas num " << i << ": " << gammas[i](0) << ", " << gammas[i](1) << ", " << gammas[i](2) << ", " << gammas[i](3) << std::endl;
 	gammas_dot[i] = cross4(omegal, gammas[i]) + kronecker(kronecker(ql, lambdas_dot[i]), ql_conj);
 	//std::cout << "Gammas_dot num " << i << ": " << gammas_dot[i](0) << ", " << gammas_dot[i](1) << ", " << gammas_dot[i](2) << ", " << gammas_dot[i](3) << std::endl;
@@ -227,7 +172,7 @@ class TrafficControl : public rclcpp::Node{
 	eta_norm = kronecker(qfu_conj[i], kronecker(ql, qdfs[i]));
 	etas[i] = eta_norm / eta_norm.norm();
 	etas[i] = qlm(etas[i]);
-	std::cout << "Etas num " << i << ": " << etas[i](0) << ", " << etas[i](1) << ", " << etas[i](2) << ", " << etas[i](3) << std::endl;
+	//std::cout << "Etas num " << i << ": " << etas[i](0) << ", " << etas[i](1) << ", " << etas[i](2) << ", " << etas[i](3) << std::endl;
 
 	//etas[i] = qlm(kronecker(qfs_conj[i], kronecker(ql, qdfs[i])));
 	// Fill efs elementwise
@@ -249,7 +194,6 @@ class TrafficControl : public rclcpp::Node{
 	sigmaf[i] = efs[i] + k[i].cwiseProduct(efs_int[i]);
 	//sigmaf[i] << efs[i];
 	
-	// Compute auxiliar control output (Continuous non-adaptive smc)
 	uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
 	//uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
 	//std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
@@ -262,6 +206,7 @@ class TrafficControl : public rclcpp::Node{
 	//Eigen::Vector4d c13 = k[i].cwiseProduct(efs[i]) + uauxs[i];
 	//Eigen::Vector4d c13 = k[i].cwiseProduct(efs[i]) - uauxs[i];
 	Eigen::Vector4d c13 = -uauxs[i]; 
+	//Eigen::Vector4d c13 = uauxs[i]; 
 	Eigen::Vector4d v13;
 	v13(0) = 0;
 	v13(1) = vl(0);
@@ -270,7 +215,7 @@ class TrafficControl : public rclcpp::Node{
 	// Reorder elements for quaternion multiplication
 	//omegafu(3, i) = c13(3);
 	omegafu[i](3) = -c13(3);
-	std::cout << "Omegafu num " << i << ": " << omegafu[i] << std::endl;
+	//std::cout << "Omegafu num " << i << ": " << omegafu[i] << std::endl;
         c13(3) = c13(2);
 	c13(2) = c13(1);
 	c13(1) = c13(0);
@@ -296,7 +241,15 @@ class TrafficControl : public rclcpp::Node{
 	std::cout << "Gammas_dot num " << i << ": " << gammas_dot[i](0) << ", " << gammas_dot[i](1) << ", " << gammas_dot[i](2) << ", " << gammas_dot[i](3) << std::endl;
 	std::cout << "Bullshit num " << i << ": " << bullshit(0) << ", " << bullshit(1) << ", " << bullshit(2) << ", " << bullshit(3) << std::endl;
 	std::cout << "POSTPRINT" << std::endl;*/
-	bullshit2 = v13 + kronecker(kronecker( ql_conj, bullshit ), ql);
+
+	//bullshit2 = v13 + kronecker(kronecker( ql_conj, bullshit ), ql);
+        //bullshit2 = kronecker(kronecker( ql_conj, bullshit ), ql);
+        bullshit2 = kronecker(kronecker( ql, bullshit ), ql_conj);
+        //bullshit2 = v13 + kronecker(kronecker( ql, bullshit ), ql_conj);
+        //bullshit2 = kronecker(kronecker( ql, bullshit ), ql_conj);
+	
+	std::cout << "v13 num " << i << ": " << v13 << std::endl;
+
 	//ufs[i] = kronecker(kronecker(qfs_conj[i], v13 + kronecker(kronecker( ql_conj, gammas_dot[i] + c13 - cross4(omegal, gammas[i])), ql)), qfs[i]);
 	//std::cout << "Bullshit num " << i << ": " << bullshit << std::endl;
 	//std::cout << "Bullshit2 num " << i << ": " << bullshit2 << std::endl;
@@ -347,6 +300,22 @@ class TrafficControl : public rclcpp::Node{
 	follower_pose_msgs[i].pose.orientation.y = qfu[i](2);
 	follower_pose_msgs[i].pose.orientation.z = qfu[i](3);
 
+	//follower_vel_msgs[i].twist.linear.x = ufs[i](1) - v13(1);
+	//follower_vel_msgs[i].twist.linear.y = ufs[i](2) - v13(2);
+	//follower_vel_msgs[i].twist.linear.z = ufs[i](3) - v13(3);
+	//follower_vel_msgs[i].twist.linear.x = v13(1);
+	//follower_vel_msgs[i].twist.linear.y = v13(2);
+	//follower_vel_msgs[i].twist.linear.z = v13(3);
+	//follower_vel_msgs[i].twist.linear.x = 0; 
+	//follower_vel_msgs[i].twist.linear.y = 0;
+	//follower_vel_msgs[i].twist.linear.z = 0;
+	follower_vel_msgs[i].twist.linear.x = ufs[i](1);
+	follower_vel_msgs[i].twist.linear.y = ufs[i](2);
+	follower_vel_msgs[i].twist.linear.z = ufs[i](3);
+	follower_vel_msgs[i].twist.angular.x = 0;
+	follower_vel_msgs[i].twist.angular.y = 0;
+	follower_vel_msgs[i].twist.angular.z = 0;
+
 	// Leave velocity as zero for now
 
 	follower_pose_msgs[i].header.stamp = this->now();
@@ -355,8 +324,21 @@ class TrafficControl : public rclcpp::Node{
 	follower_vel_msgs[i].header.frame_id = "world";
 
 	follower_pose_publishers[i]->publish(follower_pose_msgs[i]);
-	//follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
+	follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
       
+	// Publish transform
+	leader_transform.header.stamp = this->now();
+	leader_transform.header.frame_id = "world";
+	leader_transform.child_frame_id = "leader";
+	leader_transform.transform.translation.x = dl(1);
+	leader_transform.transform.translation.y = dl(2);
+	leader_transform.transform.translation.z = dl(3);
+	leader_transform.transform.rotation.w = ql(0);
+	leader_transform.transform.rotation.x = ql(1);
+	leader_transform.transform.rotation.y = ql(2);
+	leader_transform.transform.rotation.z = ql(3);
+	transform_broadcaster->sendTransform(leader_transform);
+
       }
     }
 
@@ -411,6 +393,13 @@ class TrafficControl : public rclcpp::Node{
       ql_conj(2) = -ql(2);
       ql_conj(3) = -ql(3);
     }
+    void leader_velocity_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg){
+      // Get leader velocity
+      vl(0) = msg->twist.linear.x;
+      vl(1) = msg->twist.linear.y;
+      vl(2) = msg->twist.linear.z;
+      vl(3) = msg->twist.angular.z;
+    }
     void formation_definition_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg){
       // Get formation definition
       for (int i = 0; i < num_drones; i++){
@@ -431,7 +420,15 @@ class TrafficControl : public rclcpp::Node{
 	//std::cout << "Gammasd num " << i << ": " << gammasd[i](1) << ", " << gammasd[i](2) << ", " << gammasd[i](3) << std::endl;
       }
     }
-
+ 
+    void formation_dot_definition_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg){
+      // Get formation velocity definition
+      for (int i = 0; i < num_drones; i++){
+	gammasd_dot[i](1) = msg->poses[i].position.x;
+	gammasd_dot[i](2) = msg->poses[i].position.y;
+	gammasd_dot[i](3) = msg->poses[i].position.z;
+      }
+    }
 
   private:
     int num_drones; // Number of agents (leader is not included) 
@@ -480,8 +477,12 @@ class TrafficControl : public rclcpp::Node{
     std::vector<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr>     follower_pose_publishers;
     std::vector<rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr>    follower_vel_publishers;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  		   leader_pose_subscription;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr  		   leader_velocity_subscription;
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr  		   formation_definition_subscription;
+    rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr  		   formation_dot_definition_subscription;
 
+    std::shared_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster;
+    geometry_msgs::msg::TransformStamped leader_transform; 
 };
 
 int main(int argc, char * argv[]){
