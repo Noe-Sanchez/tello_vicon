@@ -48,6 +48,7 @@ class TrafficControl : public rclcpp::Node{
       transform_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
       // Make 0.5s timer
+      //control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
       control_timer = this->create_wall_timer(10ms, std::bind(&TrafficControl::control_callback, this));
   
       // Initialize variables
@@ -143,7 +144,8 @@ class TrafficControl : public rclcpp::Node{
 	kappa1.push_back(zero4d);
 	kappa1.back() << 0.1, 0.1, 0.1, 0.1; 
 	kappa2.push_back(zero4d);
-	kappa2.back() << 0.00001, 0.00001, 0.00001, 0.00001; 
+	//kappa2.back() << 0.001, 0.001, 0.001, 0.001; 
+	kappa2.back() << 0.0001, 0.0001, 0.0001, 0.0001; 
 
       }
     }
@@ -192,7 +194,6 @@ class TrafficControl : public rclcpp::Node{
 	sigmaf[i] = efs[i] + k[i].cwiseProduct(efs_int[i]);
 	//sigmaf[i] << efs[i];
 	
-	// Compute auxiliar control output (Continuous non-adaptive smc)
 	uauxs[i] = -kappa1[i].cwiseProduct(sig(sigmaf[i], 0.5)) - kappa2[i].cwiseProduct(sigmaf[i]);
 	//uauxs[i] << -kappa1[i].cwiseProduct(sigmaf[i]);
 	//std::cout << "Sigmaf num " << i << ": " << sigmaf[i] << std::endl;
@@ -305,12 +306,12 @@ class TrafficControl : public rclcpp::Node{
 	//follower_vel_msgs[i].twist.linear.x = v13(1);
 	//follower_vel_msgs[i].twist.linear.y = v13(2);
 	//follower_vel_msgs[i].twist.linear.z = v13(3);
-	follower_vel_msgs[i].twist.linear.x = 0; 
-	follower_vel_msgs[i].twist.linear.y = 0;
-	follower_vel_msgs[i].twist.linear.z = 0;
-	//follower_vel_msgs[i].twist.linear.x = ufs[i](1);
-	//follower_vel_msgs[i].twist.linear.y = ufs[i](2);
-	//follower_vel_msgs[i].twist.linear.z = ufs[i](3);
+	//follower_vel_msgs[i].twist.linear.x = 0; 
+	//follower_vel_msgs[i].twist.linear.y = 0;
+	//follower_vel_msgs[i].twist.linear.z = 0;
+	follower_vel_msgs[i].twist.linear.x = ufs[i](1);
+	follower_vel_msgs[i].twist.linear.y = ufs[i](2);
+	follower_vel_msgs[i].twist.linear.z = ufs[i](3);
 	follower_vel_msgs[i].twist.angular.x = 0;
 	follower_vel_msgs[i].twist.angular.y = 0;
 	follower_vel_msgs[i].twist.angular.z = 0;
