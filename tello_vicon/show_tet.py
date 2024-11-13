@@ -51,7 +51,7 @@ class TelloReference(Node):
     self.leader_pose.header.stamp = self.get_clock().now().to_msg()
     self.leader_pose.pose.position.x = math.cos(self.time/16)
     self.leader_pose.pose.position.y = math.sin(self.time/16)
-    self.leader_pose.pose.position.z = 0.5 + 0.5*math.sin(self.time/32)
+    self.leader_pose.pose.position.z = 1.25 + 0.25*math.sin(self.time/32)
     self.leader_pose.pose.orientation.x = 0.0
     self.leader_pose.pose.orientation.y = 0.0
     #self.leader_pose.pose.orientation.z = math.sin(self.time*math.pi/(2*16))#0.71
@@ -84,7 +84,7 @@ class TelloReference(Node):
     for i in range(self.get_parameter('num_drones').value):
       self.follower_pose_list[i].position.x = 0.75*math.cos(i*math.pi/2)
       self.follower_pose_list[i].position.y = 0.75*math.sin(i*math.pi/2)
-      self.follower_pose_list[i].position.z = (0.0, 0.75)[i > 3]
+      self.follower_pose_list[i].position.z = (-0.25, 0.25)[i > 3]
       self.follower_pose_list[i].orientation.x = 0.0
       self.follower_pose_list[i].orientation.y = 0.0
       self.follower_pose_list[i].orientation.z = 0.0

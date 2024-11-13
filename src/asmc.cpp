@@ -38,26 +38,32 @@ class AsmcController : public rclcpp::Node{
       k_publisher     = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/control/k", 10);
       e_dot_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/control/e_dot", 10);
 
-      // Make 0.5s timer
+      // Make 0.1s timer
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
-      //zetta << 1, 1, 1, 4;
-      zetta << 3.45, 3.45, 4.25, 4;
-      //lambda << 1.1, 1.1, 1.2, 1;
-      //lambda << 1.1, 1.1, 1.2, 1.6;
-      lambda << 3.6, 3.6, 2.2, 6.6;
-      //lambda << 0.6, 0.6, 2.2, 6.6;
-      alpha << 0.001, 0.001, 0.001, 0.001;
-      beta << 0.01, 0.01, 0.01, 0.01;
+      //zetta1 << 1, 1, 1, 4;
+      zetta1  << 3.45, 3.45, 4.25, 4;
+      //zetta2  << 0.045, 0.045, 0.25, 4;
+      zetta2  << 3.45, 3.45, 4.25, 4;
+      //lambda1 << 1.1, 1.1, 1.2, 1;
+      //lambda1 << 1.1, 1.1, 1.2, 1.6;
+      //lambda1 << 3.6, 3.6, 2.2, 6.6;
+      lambda1 << 1.1, 1.1, 1.1, 1.1;
+      lambda2 << 1.1, 1.1, 1.1, 1.1;
+      //lambda1 << 0.6, 0.6, 2.2, 6.6;
+      alpha   << 0.001, 0.001, 0.001, 0.001;
+      beta    << 0.01, 0.01, 0.01, 0.01;
 
       this->declare_parameter("gains", std::vector<double>{
-	  zetta(0),  zetta(1),  zetta(2),  zetta(3), 
-	  lambda(0), lambda(1), lambda(2), lambda(3), 
+	  zetta1(0),  zetta1(1),  zetta1(2),  zetta1(3), 
+	  zetta2(0),  zetta2(1),  zetta2(2),  zetta2(3),
+	  lambda1(0), lambda1(1), lambda1(2), lambda1(3), 
+	  lambda2(0), lambda2(1), lambda2(2), lambda2(3), 
 	  alpha(0),  alpha(1),  alpha(2),  alpha(3), 
 	  beta(0),   beta(1),   beta(2),   beta(3)});
 
-      lambda_minus_1 << lambda(0)-1, lambda(1)-1, lambda(2)-1, lambda(3)-1;
+      lambda1_minus_1 << lambda1(0)-1, lambda1(1)-1, lambda1(2)-1, lambda1(3)-1;
 
       e          << 0, 0, 0, 0;
       ref_rot    << 0, 0, 0, 0;
@@ -111,10 +117,15 @@ class AsmcController : public rclcpp::Node{
 
     void control_callback(){
       gains = this->get_parameter("gains").as_double_array();
-      zetta  << gains[0], gains[1], gains[2], gains[3];
-      lambda << gains[4], gains[5], gains[6], gains[7];
+      zetta1  << gains[0],  gains[1],  gains[2],  gains[3];
+      zetta2  << gains[4],  gains[5],  gains[6],  gains[7];
+      lambda1 << gains[8],  gains[9],  gains[10], gains[11];
+      lambda2 << gains[12], gains[13], gains[14], gains[15];
+      alpha   << gains[16], gains[17], gains[18], gains[19];
+      beta    << gains[20], gains[21], gains[22], gains[23];
+      /*lambda1 << gains[4], gains[5], gains[6], gains[7];
       alpha  << gains[8], gains[9], gains[10], gains[11];
-      beta   << gains[12], gains[13], gains[14], gains[15];
+      beta   << gains[12], gains[13], gains[14], gains[15];*/
 
       // Conjugate q_hat
       q_hat << estimator_pose.pose.orientation.w, estimator_pose.pose.orientation.x, estimator_pose.pose.orientation.y, estimator_pose.pose.orientation.z;
@@ -158,7 +169,8 @@ class AsmcController : public rclcpp::Node{
                 reference_velocity.twist.angular.z;
 
       // Sliding surface 
-      sigma << e + ewise(zetta, sig(e, lambda)); 
+      //sigma << e + ewise(zetta1, sig(e, lambda1)); 
+      sigma << e + ewise(zetta1, sig(e, lambda1)) + ewise(zetta2, sig(e_dot, lambda2));
 
       // Check for NaN in sigma. Old check, not needed anymore, kept for security
       for (int i = 0; i < 4; i++){
@@ -177,21 +189,28 @@ class AsmcController : public rclcpp::Node{
 
       // Control law 
       //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5; //Original
-      //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
-      uaux << -1 * ewise(zetta, e) - 1 * ewise(lambda, e_dot);
-      //uaux << ewise(e, zetta); 
+      uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      //uaux << -1 * ewise(zetta1, e) - 1 * ewise(lambda1, e_dot);
+      //uaux << ewise(e, zetta1); 
               
       // Original feedback linearization
       /*u_rot << 0,
-               -uaux(0) + ewise(zetta, sig(e, lambda))(0) + xd_dot(0),
-               -uaux(1) + ewise(zetta, sig(e, lambda))(1) + xd_dot(1),
-               -uaux(2) + ewise(zetta, sig(e, lambda))(2) + xd_dot(2);*/
+               -uaux(0) + ewise(zetta1, sig(e, lambda1))(0) + xd_dot(0),
+               -uaux(1) + ewise(zetta1, sig(e, lambda1))(1) + xd_dot(1),
+               -uaux(2) + ewise(zetta1, sig(e, lambda1))(2) + xd_dot(2);*/
       
       // New feedback linearization, lyapunov based
-      term1 << 1 + zetta(0) * lambda(0) * pow(abs(e(0)), lambda_minus_1(0)),
-	       1 + zetta(1) * lambda(1) * pow(abs(e(1)), lambda_minus_1(1)), 
-	       1 + zetta(2) * lambda(2) * pow(abs(e(2)), lambda_minus_1(2)),
-	       1 + zetta(3) * lambda(3) * pow(abs(e(3)), lambda_minus_1(3));
+      term1 << 1 + zetta1(0) * lambda1(0) * pow(abs(e(0)), lambda1_minus_1(0)),
+	       1 + zetta1(1) * lambda1(1) * pow(abs(e(1)), lambda1_minus_1(1)), 
+	       1 + zetta1(2) * lambda1(2) * pow(abs(e(2)), lambda1_minus_1(2)),
+	       1 + zetta1(3) * lambda1(3) * pow(abs(e(3)), lambda1_minus_1(3));
+      
+      Eigen::Vector4d term3;
+      term3 << sig(e_dot(0), 2 - lambda2(0)) / (zetta2(0) * lambda2(0)),
+	       sig(e_dot(1), 2 - lambda2(1)) / (zetta2(1) * lambda2(1)),
+	       sig(e_dot(2), 2 - lambda2(2)) / (zetta2(2) * lambda2(2)),
+	       sig(e_dot(3), 2 - lambda2(3)) / (zetta2(3) * lambda2(3)); 
+
       /*u_rot << 0,
                xd_dot(0) -uaux(0)/term1(0),
 	       xd_dot(1) -uaux(1)/term1(1),
@@ -211,14 +230,19 @@ class AsmcController : public rclcpp::Node{
       // omega x J omega
       //std::cout << "Sanity check " <<  J * OMEGA << std::endl;
       //std::cout << "Sanity check " <<  OMEGA_cross * (J * OMEGA) << std::endl;
-      std::cout << "OMEGA" << OMEGA << std::endl;
-      std::cout << "Sanity check " <<  J_inv * (OMEGA_cross * (J * OMEGA)) << std::endl;
+      //std::cout << "OMEGA" << OMEGA << std::endl;
+      //std::cout << "Sanity check " <<  J_inv * (OMEGA_cross * (J * OMEGA)) << std::endl;
       term2 = J_inv * (OMEGA_cross * (J * OMEGA)); 
 
-      u << -uaux(0), 
+      /*u << -uaux(0), 
 	   -uaux(1), 
 	   -uaux(2), 
-	   -uaux(3) - term2(2);
+	   -uaux(3) - term2(2);*/
+      u << -uaux(0) + term1(0) * term2(0),
+	   -uaux(1) + term1(1) * term2(1),
+	   -uaux(2) + term1(2) * term2(2),
+	   -uaux(3) - term2(2) + term1(3) * term3(2);
+
 	   //-uaux(3);*/
 
       // Trapezoidal integral of u
@@ -227,9 +251,9 @@ class AsmcController : public rclcpp::Node{
 
 
       u_rot << 0,
-               /*xd_dot(0) - ewise(ewise(zetta, lambda), uaux)(0)/term1(0),
-	       xd_dot(1) - ewise(ewise(zetta, lambda), uaux)(1)/term1(1),
-	       xd_dot(2) - ewise(ewise(zetta, lambda), uaux)(2)/term1(2);*/
+               /*xd_dot(0) - ewise(ewise(zetta1, lambda1), uaux)(0)/term1(0),
+	       xd_dot(1) - ewise(ewise(zetta1, lambda1), uaux)(1)/term1(1),
+	       xd_dot(2) - ewise(ewise(zetta1, lambda1), uaux)(2)/term1(2);*/
                /*-uaux(0),
 	       -uaux(1),
 	       -uaux(2);*/
@@ -239,9 +263,9 @@ class AsmcController : public rclcpp::Node{
       u_rot = kronecker(kronecker(q_hat_conj, u_rot), q_hat);
       //u_rot = kronecker(kronecker(q_hat, u_rot), q_hat_conj);
 
-      //uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta, sig(e, lambda))(3);
+      //uaux(3) = -uaux(3) + xd_dot(3) + ewise(zetta1, sig(e, lambda1))(3);
       //uaux(3) = xd_dot(3) - uaux(3) / term1(3);
-      //uaux(3) = xd_dot(3) - ewise(ewise(zetta, lambda), uaux)(3) / term1(3);
+      //uaux(3) = xd_dot(3) - ewise(ewise(zetta1, lambda1), uaux)(3) / term1(3);
       /*u << u_rot(1), 
 	   u_rot(2), 
 	   u_rot(3), 
@@ -350,9 +374,11 @@ class AsmcController : public rclcpp::Node{
     geometry_msgs::msg::Twist _uaux;
     geometry_msgs::msg::Twist _sigma;
 
-    Eigen::Vector4d zetta;
-    Eigen::Vector4d lambda;
-    Eigen::Vector4d lambda_minus_1;
+    Eigen::Vector4d zetta1;
+    Eigen::Vector4d zetta2;
+    Eigen::Vector4d lambda1;
+    Eigen::Vector4d lambda1_minus_1;
+    Eigen::Vector4d lambda2;
     Eigen::Vector4d term1;
     Eigen::Vector4d e;
     Eigen::Vector4d ref_rot;

@@ -248,7 +248,7 @@ class TrafficControl : public rclcpp::Node{
         //bullshit2 = v13 + kronecker(kronecker( ql, bullshit ), ql_conj);
         //bullshit2 = kronecker(kronecker( ql, bullshit ), ql_conj);
 	
-	std::cout << "v13 num " << i << ": " << v13 << std::endl;
+	//std::cout << "v13 num " << i << ": " << v13 << std::endl;
 
 	//ufs[i] = kronecker(kronecker(qfs_conj[i], v13 + kronecker(kronecker( ql_conj, gammas_dot[i] + c13 - cross4(omegal, gammas[i])), ql)), qfs[i]);
 	//std::cout << "Bullshit num " << i << ": " << bullshit << std::endl;
@@ -314,7 +314,7 @@ class TrafficControl : public rclcpp::Node{
 	follower_vel_msgs[i].twist.linear.z = ufs[i](3);
 	follower_vel_msgs[i].twist.angular.x = 0;
 	follower_vel_msgs[i].twist.angular.y = 0;
-	follower_vel_msgs[i].twist.angular.z = 0;
+	follower_vel_msgs[i].twist.angular.z = omegafu[i](3); 
 
 	// Leave velocity as zero for now
 

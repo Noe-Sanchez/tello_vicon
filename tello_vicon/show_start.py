@@ -74,8 +74,8 @@ class TelloReference(Node):
 
     # Iterate over all drones
     for i in range(self.get_parameter('num_drones').value):
-      self.follower_pose_list[i].position.x = i - (self.num_drones/2) + 0.5 
-      self.follower_pose_list[i].position.y = 0.0
+      self.follower_pose_list[i].position.x = (i%4) - min(4, self.num_drones)/2 + 0.5 
+      self.follower_pose_list[i].position.y = float(math.floor((i+0.01)/4) - math.floor((self.num_drones-0.01)/4)/2)
       self.follower_pose_list[i].position.z = 0.0
       self.follower_pose_list[i].orientation.x = 0.0
       self.follower_pose_list[i].orientation.y = 0.0
