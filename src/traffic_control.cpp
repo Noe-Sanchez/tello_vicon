@@ -181,8 +181,22 @@ class TrafficControl : public rclcpp::Node{
   	    //if (distance.norm() < 0.5){
   	    //if (abs(distance.norm()) < 1.5){
   	    if (abs(distance.norm()) < 0.5){
-  	      gammaf[i] +=    distance_unit*(1/(distance.norm()+0.001));
-  	      gammaf[j] += -1*distance_unit*(1/(distance.norm()+0.001)); 
+	      //gammaf[i] +=    distance_unit*(1/(distance.norm()+0.001));
+  	      //gammaf[j] += -1*distance_unit*(1/(distance.norm()+0.001)); 
+
+	      //gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001)); 
+	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
+	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
+	      
+	      gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001)); 
+	      gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
+	      gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
+
+	      gammaf[j](1) += -1*gammaf[i](1);
+	      gammaf[j](2) += -1*gammaf[i](2);
+	      gammaf[j](3) += -1*gammaf[i](3);
+
+
   	      //gammaf[i] +=    distance_unit*0.6;
   	      //gammaf[j] += -1*distance_unit*0.6;
 	      std::cout << "Will try to compute gammaf " << i << " and " << j << " with mag " << gammaf[i].norm() << std::endl; 
