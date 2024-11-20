@@ -57,6 +57,10 @@ install(PROGRAMS
   tello_vicon/show_crystal.py
   tello_vicon/show_start.py
   tello_vicon/show_tet.py
+  tello_vicon/show_4scramble.py
+  tello_vicon/show_fscramble.py
+  tello_vicon/show_vscramble.py
+  tello_vicon/show_simpleswap.py
   tello_vicon/tello_joy.py
   DESTINATION lib/${PROJECT_NAME}
 )

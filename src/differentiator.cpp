@@ -76,12 +76,18 @@ class Differentiator : public rclcpp::Node{
   public:
     Differentiator(): Node("pid_node"){
       // Subscribers
-      vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
+      //vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
+      vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_0/tello/estimator/pose", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
+      vel_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_0/tello/estimator/velocity", 10, std::bind(&Differentiator::vel_callback, this, std::placeholders::_1));
 
       // Publishers
-      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);
-      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10);
-      estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose_error", 10);
+      //estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);
+      //estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10);
+      //estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose_error", 10);
+      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/differentiator/pose", 10);
+      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/differentiator/velocity", 10);
+      estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/differentiator/pose_error", 10);
+      estimation_velocity_error_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/differentiator/velocity_error", 10);
 
       // Make 0.01s timer
       estimator_timer = this->create_wall_timer(10ms, std::bind(&Differentiator::estimator_callback, this));
@@ -134,6 +140,11 @@ class Differentiator : public rclcpp::Node{
     void vicon_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
       vicon_pose = *msg;
     }
+    
+    void vel_callback(const geometry_msgs::msg::TwistStamped::SharedPtr msg){
+      vicon_velocity = *msg;
+    }
+
 
     void estimator_callback(){
       q_vicon << vicon_pose.pose.orientation.w,
@@ -236,6 +247,16 @@ class Differentiator : public rclcpp::Node{
       estimated_pose_error.pose.orientation.z = q_tilde(3);
       estimated_pose_error.header.stamp = this->now();
       estimated_pose_error.header.frame_id = "world";
+      
+      // Publish estimated velocity error
+      estimated_velocity_error.twist.linear.x = varsigma2_hat(0) - vicon_velocity.twist.linear.x;
+      estimated_velocity_error.twist.linear.y = varsigma2_hat(1) - vicon_velocity.twist.linear.y;
+      estimated_velocity_error.twist.linear.z = varsigma2_hat(2) - vicon_velocity.twist.linear.z;
+      estimated_velocity_error.twist.angular.x = w_hat(0) - vicon_velocity.twist.angular.x;
+      estimated_velocity_error.twist.angular.y = w_hat(1) - vicon_velocity.twist.angular.y;
+      estimated_velocity_error.twist.angular.z = w_hat(2) - vicon_velocity.twist.angular.z;
+      estimated_velocity_error.header.stamp = this->now();
+      estimated_velocity_error.header.frame_id = "tello";
 
       // Publish estimated transform
       estimated_transform.header.stamp = this->now();
@@ -254,6 +275,7 @@ class Differentiator : public rclcpp::Node{
       estimation_velocity_publisher->publish(estimated_velocity);
       estimation_pose_error_publisher->publish(estimated_pose_error);
       transform_broadcaster->sendTransform(estimated_transform);
+      estimation_velocity_error_publisher->publish(estimated_velocity_error);
     }
 
   private:
@@ -263,6 +285,8 @@ class Differentiator : public rclcpp::Node{
     geometry_msgs::msg::PoseStamped estimated_pose_error;
     geometry_msgs::msg::TwistStamped estimated_velocity;
     geometry_msgs::msg::TransformStamped estimated_transform;
+    geometry_msgs::msg::TwistStamped estimated_velocity_error;
+    geometry_msgs::msg::TwistStamped vicon_velocity;
    
     Eigen::Vector4d q_hat;
     Eigen::Vector4d q_hat_dot;
@@ -298,10 +322,12 @@ class Differentiator : public rclcpp::Node{
 
     rclcpp::TimerBase::SharedPtr estimator_timer;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vicon_subscriber;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr vel_subscriber;
 
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr estimation_position_publisher;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr estimation_pose_error_publisher;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr estimation_velocity_publisher;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr estimation_velocity_error_publisher;
 
     std::shared_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster;
 };

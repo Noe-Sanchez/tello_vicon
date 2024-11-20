@@ -8,6 +8,7 @@ import math
 # Qos durability
 from rclpy.qos import QoSProfile
 from rclpy.qos import DurabilityPolicy
+import random
 
 class TelloReference(Node):
   def __init__(self) -> None:
@@ -38,13 +39,25 @@ class TelloReference(Node):
     self.formation_dot_definition = PoseArray()
 
     self.timer = self.create_timer(0.01, self.timer_callback)
-    self.time = 0
 
     self.follower_pose_list = []
     self.follower_velocity_list = []
     for i in range(self.num_drones):
       self.follower_pose_list.append(Pose())
       self.follower_velocity_list.append(Pose())
+
+    self.scramble_vector = []
+    for i in range(self.num_drones):
+      print(i)
+      # Apend random element
+      while True:
+        rand_val = random.randint(0, self.num_drones-1)
+        if rand_val not in self.scramble_vector:
+          self.scramble_vector.append(rand_val)
+          break
+      #if rand_val not in self.scramble_vector:
+      #  self.scramble_vector.append(rand_val)
+    print("New configuration: ", self.scramble_vector)
 
   def timer_callback(self) -> None:
     # Leader
@@ -74,21 +87,38 @@ class TelloReference(Node):
 
     # Iterate over all drones
     for i in range(self.get_parameter('num_drones').value):
-      self.follower_pose_list[i].position.x = (i%4) - min(4, self.num_drones)/2 + 0.5 
-      self.follower_pose_list[i].position.y = float(math.floor((i+0.01)/4) - math.floor((self.num_drones-0.01)/4)/2)
-      self.follower_pose_list[i].position.z = 0.0
-      self.follower_pose_list[i].orientation.x = 0.0
-      self.follower_pose_list[i].orientation.y = 0.0
-      self.follower_pose_list[i].orientation.z = 0.0
-      self.follower_pose_list[i].orientation.w = 1.0
+      #self.follower_pose_list[i].position.x = (i%4) - min(4, self.num_drones)/2 + 0.5 
+      #self.follower_pose_list[i].position.y = float(math.floor((i+0.01)/4) - math.floor((self.num_drones-0.01)/4)/2)
+      #self.follower_pose_list[i].position.z = 0.0
+      #self.follower_pose_list[i].orientation.x = 0.0
+      #self.follower_pose_list[i].orientation.y = 0.0
+      #self.follower_pose_list[i].orientation.z = 0.0
+      #self.follower_pose_list[i].orientation.w = 1.0
+      self.follower_pose_list[self.scramble_vector[i]].position.x = (i%4) - min(4, self.num_drones)/2 + 0.5 
+      self.follower_pose_list[self.scramble_vector[i]].position.y = float(math.floor((i+0.01)/4) - math.floor((self.num_drones-0.01)/4)/2)
+      #self.follower_pose_list[self.scramble_vector[i]].position.x = 0.75*math.cos(i*math.pi/2)
+      #self.follower_pose_list[self.scramble_vector[i]].position.y = 0.75*math.sin(i*math.pi/2)
+      self.follower_pose_list[self.scramble_vector[i]].position.z = 0.0
+      self.follower_pose_list[self.scramble_vector[i]].orientation.x = 0.0
+      self.follower_pose_list[self.scramble_vector[i]].orientation.y = 0.0
+      self.follower_pose_list[self.scramble_vector[i]].orientation.z = 0.0
+      self.follower_pose_list[self.scramble_vector[i]].orientation.w = 1.0
 
-      self.follower_velocity_list[i].position.x = 0.0
-      self.follower_velocity_list[i].position.y = 0.0
-      self.follower_velocity_list[i].position.z = 0.0
-      self.follower_velocity_list[i].orientation.x = 0.0
-      self.follower_velocity_list[i].orientation.y = 0.0
-      self.follower_velocity_list[i].orientation.z = 0.0
-      self.follower_velocity_list[i].orientation.w = 0.0 
+      #self.follower_velocity_list[i].position.x = 0.0
+      #self.follower_velocity_list[i].position.y = 0.0
+      #self.follower_velocity_list[i].position.z = 0.0
+      #self.follower_velocity_list[i].orientation.x = 0.0
+      #self.follower_velocity_list[i].orientation.y = 0.0
+      #self.follower_velocity_list[i].orientation.z = 0.0
+      #self.follower_velocity_list[i].orientation.w = 0.0 
+
+      self.follower_velocity_list[self.scramble_vector[i]].position.x = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].position.y = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].position.z = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].orientation.x = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].orientation.y = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].orientation.z = 0.0
+      self.follower_velocity_list[self.scramble_vector[i]].orientation.w = 0.0 
 
     self.formation_definition.header.stamp = self.get_clock().now().to_msg()
     self.formation_definition.poses = self.follower_pose_list
@@ -101,15 +131,6 @@ class TelloReference(Node):
     self.formation_dot_definition.header.frame_id = 'leader'
 
     self.formation_dot_definition_publisher.publish(self.formation_dot_definition)
-
-    self.time += 0.01
-
-    if self.time >= 5:
-      # Shut down node
-      self.get_logger().info('Shutting down node...')
-      self.destroy_node()
-      rclpy.shutdown()
-
 
 def main(args=None) -> None:
     print('Starting tello reference node...')
