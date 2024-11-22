@@ -43,14 +43,15 @@ class AsmcController : public rclcpp::Node{
   
       // Initialize variables 
       //zetta1 << 1, 1, 1, 4;
-      zetta1  << 3.45, 3.45, 4.25, 4;
+      //zetta1  << 3.45, 3.45, 4.25, 4;
+      zetta1  << 0.45, 0.45, 0.25, 2;
       //zetta2  << 0.045, 0.045, 0.25, 4;
       zetta2  << 3.45, 3.45, 4.25, 4;
       //lambda1 << 1.1, 1.1, 1.2, 1;
       //lambda1 << 1.1, 1.1, 1.2, 1.6;
       //lambda1 << 3.6, 3.6, 2.2, 6.6;
       lambda1 << 1.1, 1.1, 1.1, 1.1;
-      lambda2 << 1.1, 1.1, 1.1, 1.1;
+      lambda2 << 1.2, 1.2, 1.1, 1.1;
       //lambda1 << 0.6, 0.6, 2.2, 6.6;
       alpha   << 0.001, 0.001, 0.001, 0.001;
       beta    << 0.01, 0.01, 0.01, 0.01;
@@ -190,6 +191,7 @@ class AsmcController : public rclcpp::Node{
       // Control law 
       //uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(exp4(K, 2), sigma) * 0.5; //Original
       uaux << -2 * ewise(K, sig(sigma, 0.5)) - ewise(K, sigma) * 0.5;
+      //uaux << -2*sig(sigma, 0.5);
       //uaux << -1 * ewise(zetta1, e) - 1 * ewise(lambda1, e_dot);
       //uaux << ewise(e, zetta1); 
               
@@ -242,6 +244,10 @@ class AsmcController : public rclcpp::Node{
 	   -uaux(1) + term1(1) * term2(1),
 	   -uaux(2) + term1(2) * term2(2),
 	   -uaux(3) - term2(2) + term1(3) * term3(2);
+      /*u << -uaux(0), 
+	   -uaux(1),
+	   -uaux(2),
+	   -uaux(3);*/
 
 	   //-uaux(3);*/
 
@@ -300,20 +306,28 @@ class AsmcController : public rclcpp::Node{
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;*/
       
-      u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
+      /*u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
       u_t(1) = 200 * (u_t(1) + 1.6)/(3.2) - 100;
       u_t(2) = 200 * (u_t(2) + 1.0)/(2.0) - 100;
-      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;
+      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;*/
+      
+      u_t(0) = 50 * (u_t(0) + 1.6)/(3.2) - 25;
+      u_t(1) = 50 * (u_t(1) + 1.6)/(3.2) - 25;
+      u_t(2) = 50 * (u_t(2) + 1.0)/(2.0) - 25;
+      u_t(3) = 50 * (u_t(3) + 1.0)/(2.0) - 25;
 
       /*_uaux.linear.x =  uaux(0);
       _uaux.linear.y =  uaux(1);
       _uaux.linear.z =  uaux(2);
       _uaux.angular.z = uaux(3);*/
 
-      _uaux.linear.x  = u_t(0);  
-      _uaux.linear.y  = u_t(1); 
+      // Check axis with respect to vicon
+      _uaux.linear.x  = -u_t(1);  
+      _uaux.linear.y  = u_t(0); 
       _uaux.linear.z  = u_t(2); 
-      _uaux.angular.z = u_t(3);
+      //_uaux.angular.z = u_t(3);
+      _uaux.angular.z = -u_t(3);
+      //_uaux.angular.z = 0.0; 
 
       _sigma.linear.x = sigma(0);
       _sigma.linear.y = sigma(1);

@@ -180,7 +180,8 @@ class TrafficControl : public rclcpp::Node{
   	    // Express avoidance in terms of distance
   	    //if (distance.norm() < 0.5){
   	    //if (abs(distance.norm()) < 1.5){
-  	    if (abs(distance.norm()) < 0.5){
+  	    //if (abs(distance.norm()) < 0.5){
+  	    if (abs(distance.norm()) < 1){
 	      //gammaf[i] +=    distance_unit*(1/(distance.norm()+0.001));
   	      //gammaf[j] += -1*distance_unit*(1/(distance.norm()+0.001)); 
 
@@ -188,8 +189,8 @@ class TrafficControl : public rclcpp::Node{
 	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
 	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
 	      
-	      gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001)); 
-	      gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
+	      gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(2/(distance.norm()+0.001)); 
+	      gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(2/(distance.norm()+0.001));
 	      gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
 
 	      gammaf[j](1) += -1*gammaf[i](1);
@@ -316,16 +317,16 @@ class TrafficControl : public rclcpp::Node{
 	
 	//ufs[i] = kronecker(kronecker(qfu_conj[i], bullshit2), qfu[i]);
 	//ufs[i] << bullshit2;
-	ufs[i] << bullshit2 + gammaf[i];
+	ufs[i] << bullshit2 + 0.01*gammaf[i];
 	// Saturate ufs
-	ufs[i](0) = std::min(std::max(ufs[i](0), -1.6), 1.6);
+	/*ufs[i](0) = std::min(std::max(ufs[i](0), -1.6), 1.6);
 	ufs[i](1) = std::min(std::max(ufs[i](1), -1.6), 1.6);
 	ufs[i](2) = std::min(std::max(ufs[i](2), -1.0), 1.0);
-	ufs[i](3) = std::min(std::max(ufs[i](3), -1.0), 1.0);
-	//ufs[i](0) = std::min(std::max(ufs[i](0), -0.25*1.6), 0.25*1.6);
-	//ufs[i](1) = std::min(std::max(ufs[i](1), -0.25*1.6), 0.25*1.6);
-	//ufs[i](2) = std::min(std::max(ufs[i](2), -0.25*1.0), 0.25*1.0);
-	//ufs[i](3) = std::min(std::max(ufs[i](3), -0.25*1.0), 0.25*1.0);
+	ufs[i](3) = std::min(std::max(ufs[i](3), -1.0), 1.0);*/
+	ufs[i](0) = std::min(std::max(ufs[i](0), -0.01*1.6), 0.01*1.6);
+	ufs[i](1) = std::min(std::max(ufs[i](1), -0.01*1.6), 0.01*1.6);
+	ufs[i](2) = std::min(std::max(ufs[i](2), -0.01*1.0), 0.01*1.0);
+	ufs[i](3) = std::min(std::max(ufs[i](3), -0.01*1.0), 0.01*1.0);
 
 	//std::cout << "Ufs num " << i << ": " << ufs[i] << std::endl; 
 	// Ufs should be [0, x, y, z]^T

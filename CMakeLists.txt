@@ -51,6 +51,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
   tello_vicon/tello_wrapper.py
+  tello_vicon/tello_multi_wrapper.py
   tello_vicon/reference.py
   tello_vicon/multi_reference.py
   tello_vicon/show_pinwheel.py

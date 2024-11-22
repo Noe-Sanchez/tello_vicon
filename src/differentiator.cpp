@@ -75,19 +75,28 @@ using namespace std::chrono_literals;
 class Differentiator : public rclcpp::Node{
   public:
     Differentiator(): Node("pid_node"){
+      this->declare_parameter("drone_id", 0);
+      drone_id = this->get_parameter("drone_id").as_int();
+
       // Subscribers
       //vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount1/TelloMount1", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
-      vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_0/tello/estimator/pose", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
-      vel_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_0/tello/estimator/velocity", 10, std::bind(&Differentiator::vel_callback, this, std::placeholders::_1));
+      vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/vicon/TelloMount" + std::to_string(drone_id+1) + "/TelloMount" + std::to_string(drone_id+1), 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
+      //vicon_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>("/tello_0/tello/estimator/pose", 10, std::bind(&Differentiator::vicon_callback, this, std::placeholders::_1));
+      //vel_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("/tello_0/tello/estimator/velocity", 10, std::bind(&Differentiator::vel_callback, this, std::placeholders::_1));
 
       // Publishers
       //estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);
       //estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/estimator/velocity", 10);
       //estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose_error", 10);
-      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/differentiator/pose", 10);
+      /*estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/differentiator/pose", 10);
       estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/differentiator/velocity", 10);
       estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/differentiator/pose_error", 10);
       estimation_velocity_error_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello/differentiator/velocity_error", 10);
+      */
+      estimation_position_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello_" + std::to_string(drone_id) + "/tello/estimator/pose", 10);
+      estimation_velocity_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello_" + std::to_string(drone_id) + "/tello/estimator/velocity", 10);
+      estimation_pose_error_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello_" + std::to_string(drone_id) + "/tello/estimator/pose_error", 10);
+      estimation_velocity_error_publisher = this->create_publisher<geometry_msgs::msg::TwistStamped>("tello_" + std::to_string(drone_id) + "/tello/estimator/velocity_error", 10);
 
       // Make 0.01s timer
       estimator_timer = this->create_wall_timer(10ms, std::bind(&Differentiator::estimator_callback, this));
@@ -133,8 +142,8 @@ class Differentiator : public rclcpp::Node{
       std::cout << "lin_vicon: " << lin_vicon << std::endl;
 
       // Get drone_id parameter
-      this->declare_parameter("drone_id", 0);
-      drone_id = this->get_parameter("drone_id").as_int();
+      //this->declare_parameter("drone_id", 0);
+      //drone_id = this->get_parameter("drone_id").as_int();
     }
 
     void vicon_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg){
@@ -219,6 +228,10 @@ class Differentiator : public rclcpp::Node{
       estimated_pose.pose.orientation.x = q_hat(1);
       estimated_pose.pose.orientation.y = q_hat(2);
       estimated_pose.pose.orientation.z = q_hat(3);
+      //estimated_pose.pose.orientation.w = q_vicon(0);
+      //estimated_pose.pose.orientation.x = q_vicon(1);
+      //estimated_pose.pose.orientation.y = q_vicon(2);
+      //estimated_pose.pose.orientation.z = q_vicon(3);
       estimated_pose.header.stamp = this->now();
       estimated_pose.header.frame_id = "world";
 
@@ -234,6 +247,9 @@ class Differentiator : public rclcpp::Node{
       estimated_velocity.twist.angular.x = w_hat(0);
       estimated_velocity.twist.angular.y = w_hat(1);
       estimated_velocity.twist.angular.z = w_hat(2);
+      //estimated_velocity.twist.angular.x = 0;
+      //estimated_velocity.twist.angular.y = 0;
+      //estimated_velocity.twist.angular.z = 0; 
       estimated_velocity.header.stamp = this->now();
       estimated_velocity.header.frame_id = "tello";
 
