@@ -8,6 +8,9 @@ import sys
 from djitellopy import TelloSwarm
 import functools
 
+# Import qos 
+from rclpy.qos import QoSProfile
+
 class TelloWrapper(Node):
   def __init__(self) -> None:
     super().__init__('tello_wrapper')
@@ -26,10 +29,14 @@ class TelloWrapper(Node):
     self.control_subscribers = []
     self.control_inputs = []
 
+    # No queue size in qos_profile
+    qos_profile = QoSProfile(depth=10, history=1, reliability=2, durability=2)
+
     # Create subscribers
     #self.control_subscriber = self.create_subscription(Twist, namespace + "/tello/control/uaux", self.control_input_callback, 10)
     for i in range(self.num_drones):
-      self.control_subscribers.append(self.create_subscription(Twist, "/tello_" + str(i) + "/tello/control/uaux", functools.partial(self.control_input_callback, i=i), 10))
+      #self.control_subscribers.append(self.create_subscription(Twist, "/tello_" + str(i) + "/tello/control/uaux", functools.partial(self.control_input_callback, i=i), 10))
+      self.control_subscribers.append(self.create_subscription(Twist, "/tello_" + str(i) + "/tello/control/uaux", functools.partial(self.control_input_callback, i=i), qos_profile))
       self.control_inputs.append(Twist())
 
     self.enable_susbcriber = self.create_subscription(String, "master/enable", self.enable_callback, 10)
@@ -56,6 +63,10 @@ class TelloWrapper(Node):
         TelloIps.append("10.15.232.96")
       if i == 1:
         TelloIps.append("10.15.232.94")
+      if i == 2:
+        TelloIps.append("10.15.232.80")
+      if i == 3:
+        TelloIps.append("10.15.232.63")
       #TelloIps.append("10.15.232." + str(96 + i))
 
     self.swarm = TelloSwarm.fromIps(TelloIps)
@@ -111,9 +122,11 @@ class TelloWrapper(Node):
     for i in range(self.num_drones):
       if self.enable:
         self.swarm.parallel(lambda i, tello: tello.send_rc_control(int(self.control_inputs[i].linear.x), int(self.control_inputs[i].linear.y), int(self.control_inputs[i].linear.z), int(self.control_inputs[i].angular.z)))
+        #print("Control: ", self.control_inputs[i].linear.x, self.control_inputs[i].linear.y, self.control_inputs[i].linear.z, self.control_inputs[i].angular.z)
       #things
       else:
         self.swarm.parallel(lambda i, tello: tello.send_rc_control(0, 0, 0, 0))
+        #print("Control: ", 0, 0, 0, 0)
       #self.tello.send_rc_control(-int(cy), int(cx), int(cz), 0)
       #self.tello.send_rc_control(-msg.linear.x, msg.linear.y, msg.linear.z, 0)
       
@@ -140,5 +153,5 @@ if __name__ == '__main__':
     except Exception as e:
         #tello_wrapper.tello.send_rc_control(0, 0, 0, 0)
         tello_wrapper.swarm.parallel(lambda i, tello: tello.send_rc_control(0, 0, 0, 0))
-        tellowrapper.swarm.land()
+        tello_wrapper.swarm.land()
         print(e)

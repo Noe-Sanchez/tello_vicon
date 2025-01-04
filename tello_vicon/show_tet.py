@@ -49,25 +49,25 @@ class TelloReference(Node):
   def timer_callback(self) -> None:
     # Leader
     self.leader_pose.header.stamp = self.get_clock().now().to_msg()
-    self.leader_pose.pose.position.x = math.cos(self.time/16)
-    self.leader_pose.pose.position.y = math.sin(self.time/16)
-    self.leader_pose.pose.position.z = 1.25 + 0.25*math.sin(self.time/32)
+    self.leader_pose.pose.position.x = 0.75*math.cos(self.time/16)
+    self.leader_pose.pose.position.y = 0.75*math.sin(self.time/16)
+    self.leader_pose.pose.position.z = 1 + 0.25*math.sin(self.time/32)
     self.leader_pose.pose.orientation.x = 0.0
     self.leader_pose.pose.orientation.y = 0.0
     #self.leader_pose.pose.orientation.z = math.sin(self.time*math.pi/(2*16))#0.71
     #self.leader_pose.pose.orientation.w = math.cos(self.time*math.pi/(2*16))#0.71
-    self.leader_pose.pose.orientation.z = 0.0 
-    self.leader_pose.pose.orientation.w = 1.0
-    #self.leader_pose.pose.orientation.z = 0.71 
-    #self.leader_pose.pose.orientation.w = 0.71
+    #self.leader_pose.pose.orientation.z = 0.0 
+    #self.leader_pose.pose.orientation.w = 1.0
+    self.leader_pose.pose.orientation.z = 0.71 
+    self.leader_pose.pose.orientation.w = 0.71
     
     self.leader_pose.header.frame_id = 'world'
     self.leader_pose_publisher.publish(self.leader_pose)
 
      
     self.leader_velocity.header.stamp = self.get_clock().now().to_msg()
-    self.leader_velocity.twist.linear.x = -math.sin(self.time/16)/16
-    self.leader_velocity.twist.linear.y = math.cos(self.time/16)/16
+    self.leader_velocity.twist.linear.x = -0.75*math.sin(self.time/16)/16
+    self.leader_velocity.twist.linear.y = 0.75*math.cos(self.time/16)/16
     #self.leader_velocity.twist.linear.x = math.sin(self.time/16)/16
     #self.leader_velocity.twist.linear.y = -math.cos(self.time/16)/16
     #self.leader_velocity.twist.linear.x = 0.0 
@@ -84,7 +84,8 @@ class TelloReference(Node):
     for i in range(self.get_parameter('num_drones').value):
       self.follower_pose_list[i].position.x = 0.75*math.cos(i*math.pi/2)
       self.follower_pose_list[i].position.y = 0.75*math.sin(i*math.pi/2)
-      self.follower_pose_list[i].position.z = (-0.25, 0.25)[i > 3]
+      #self.follower_pose_list[i].position.z = (-0.25, 0.25)[i > 3]
+      self.follower_pose_list[i].position.z = 0.0 
       self.follower_pose_list[i].orientation.x = 0.0
       self.follower_pose_list[i].orientation.y = 0.0
       self.follower_pose_list[i].orientation.z = 0.0

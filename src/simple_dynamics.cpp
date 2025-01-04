@@ -16,6 +16,9 @@
 #include "std_msgs/msg/bool.hpp"
 #include <tf2_ros/transform_broadcaster.h>
 
+//Include Qos profiles
+#include "rclcpp/qos.hpp"
+
 using namespace std::chrono_literals;
 
 double euclidean2(geometry_msgs::msg::PoseStamped p1, geometry_msgs::msg::PoseStamped p2){
@@ -33,7 +36,15 @@ class SimpleDynamics : public rclcpp::Node{
     SimpleDynamics(): Node("asmc_node"){
       // Subscribers
       reset_state_subscriber       = this->create_subscription<std_msgs::msg::Bool>("tello/control/reset_state", 10, std::bind(&SimpleDynamics::reset_state_callback, this, std::placeholders::_1));
+
+      rclcpp::QoS qos(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
+      qos.reliability(rmw_qos_reliability_policy_t::RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
+      qos.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_VOLATILE);
+      qos.keep_last(10);
+
       control_input_subscriber     = this->create_subscription<geometry_msgs::msg::Twist>("tello/control/uaux", 10, std::bind(&SimpleDynamics::control_input_callback, this, std::placeholders::_1));
+      // Add qos profile to control input subscriber
+      //control_input_subscriber     = this->create_subscription<geometry_msgs::msg::Twist>("tello/control/uaux", qos, std::bind(&SimpleDynamics::control_input_callback, this, std::placeholders::_1));
 
       // Publishers
       estimator_pose_publisher     = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/estimator/pose", 10);

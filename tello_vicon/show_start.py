@@ -104,11 +104,11 @@ class TelloReference(Node):
 
     self.time += 0.01
 
-    if self.time >= 5:
-      # Shut down node
-      self.get_logger().info('Shutting down node...')
-      self.destroy_node()
-      rclpy.shutdown()
+    #if self.time >= 5:
+    #  # Shut down node
+    #  self.get_logger().info('Shutting down node...')
+    #  self.destroy_node()
+    #  rclpy.shutdown()
 
 
 def main(args=None) -> None:

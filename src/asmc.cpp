@@ -13,6 +13,9 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
+// Include qos profiles
+#include "rclcpp/qos.hpp"
+
 using namespace std::chrono_literals;
 
 class AsmcController : public rclcpp::Node{
@@ -29,8 +32,15 @@ class AsmcController : public rclcpp::Node{
       reference_pose_subscriber     = this->create_subscription<geometry_msgs::msg::PoseStamped>("tello/reference/pose", 10, std::bind(&AsmcController::position_reference_callback, this, std::placeholders::_1));
       reference_velocity_subscriber = this->create_subscription<geometry_msgs::msg::TwistStamped>("tello/reference/velocity", 10, std::bind(&AsmcController::velocity_reference_callback, this, std::placeholders::_1));
 
+      // Qos for uaux_publisher
+      /*rclcpp::QoS qos(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
+      qos.reliability(rmw_qos_reliability_policy_t::RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
+      qos.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_VOLATILE);
+      qos.keep_last(10);*/
+
       // Publishers
       uaux_publisher    = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", 10);
+      //uaux_publisher    = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/uaux", qos);
       sigma_publisher   = this->create_publisher<geometry_msgs::msg::Twist>("tello/control/sigma", 10);
       error_publisher   = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/error", 10);
       ref_rot_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("tello/control/ref_rot", 10);
@@ -42,19 +52,48 @@ class AsmcController : public rclcpp::Node{
       control_timer = this->create_wall_timer(10ms, std::bind(&AsmcController::control_callback, this));
   
       // Initialize variables 
+      // Old sim gains
       //zetta1 << 1, 1, 1, 4;
       //zetta1  << 3.45, 3.45, 4.25, 4;
-      zetta1  << 0.45, 0.45, 0.25, 2;
       //zetta2  << 0.045, 0.045, 0.25, 4;
-      zetta2  << 3.45, 3.45, 4.25, 4;
       //lambda1 << 1.1, 1.1, 1.2, 1;
       //lambda1 << 1.1, 1.1, 1.2, 1.6;
       //lambda1 << 3.6, 3.6, 2.2, 6.6;
-      lambda1 << 1.1, 1.1, 1.1, 1.1;
-      lambda2 << 1.2, 1.2, 1.1, 1.1;
       //lambda1 << 0.6, 0.6, 2.2, 6.6;
+
+      zetta1  << 3.45, 3.45, 4.25, 4;
+      zetta2  << 3.45, 3.45, 4.25, 4;
+      lambda1 << 1.1, 1.1, 1.1, 1.1;
+      lambda2 << 1.1, 1.1, 1.1, 1.1;
       alpha   << 0.001, 0.001, 0.001, 0.001;
       beta    << 0.01, 0.01, 0.01, 0.01;
+
+      // Old physical gains
+      //zetta1  << 0.45, 0.45, 0.25, 2;
+      //zetta2  << 3.45, 3.45, 4.25, 4;
+      //lambda1 << 1.1, 1.1, 1.1, 1.1;
+      //lambda2 << 1.2, 1.2, 1.1, 1.1;
+      //alpha   << 0.001, 0.001, 0.001, 0.001;
+      //beta    << 0.01, 0.01, 0.01, 0.01;
+
+      // New physical gains
+      // /tello_0/asmc_node_0.gains: [0.45,0.45,0.45,4,7.45,7.45,6.25,0.1,1.4,1.4,1.4,1.4,1.4,1.4,1.1,1.1,0.01,0.01,0.05,0.001,0.1,0.1,0.01,0.01]
+      //zetta1  << 0.45, 0.45, 0.45, 4;
+      //zetta2  << 7.45, 7.45, 6.25, 0.1;
+      //lambda1 << 1.4, 1.4, 1.4, 1.4;
+      //lambda2 << 1.4, 1.4, 1.1, 1.1;
+      //alpha   << 0.01, 0.01, 0.05, 0.001;
+      //beta    << 0.1, 0.1, 0.01, 0.01;
+
+      // Preformation gains
+      // /tello_0/asmc_node_0.gains: [0.45,0.45,0.45,4,8.45,8.45,6.25,29,1.4,1.4,1.4,1.4,1.4,1.4,1.1,1.1,0.01,0.01,0.05,0.00001,0.1,0.1,0.01,0.0001]
+      /*zetta1  << 0.45, 0.45, 0.45, 4;
+      zetta2  << 8.45, 8.45, 6.25, 29;
+      lambda1 << 1.4, 1.4, 1.4, 1.4;
+      lambda2 << 1.4, 1.4, 1.1, 1.1;
+      alpha   << 0.01, 0.01, 0.05, 0.00001;
+      beta    << 0.1, 0.1, 0.01, 0.0001;*/
+
 
       this->declare_parameter("gains", std::vector<double>{
 	  zetta1(0),  zetta1(1),  zetta1(2),  zetta1(3), 
@@ -240,10 +279,18 @@ class AsmcController : public rclcpp::Node{
 	   -uaux(1), 
 	   -uaux(2), 
 	   -uaux(3) - term2(2);*/
-      u << -uaux(0) + term1(0) * term2(0),
+      /*u << -uaux(0) + term1(0) * term2(0),
 	   -uaux(1) + term1(1) * term2(1),
 	   -uaux(2) + term1(2) * term2(2),
-	   -uaux(3) - term2(2) + term1(3) * term3(2);
+	   -uaux(3) - term2(2) + term1(3) * term3(2);*/
+      u << -uaux(0) + term1(0) * term3(0),
+	   -uaux(1) + term1(1) * term3(1),
+	   -uaux(2) + term1(2) * term3(2),
+	   //-uaux(3) - term2(2) + term1(3) * term3(2);
+	   //-uaux(3) + term2(2) + term1(3) * term3(3);
+	   -uaux(3) + term2(2) + term1(3) * term3(3);
+	   //-uaux(3) + term2(2) + term1(3) * term3(3);
+	   //-uaux(3) + term1(3) * term3(3);
       /*u << -uaux(0), 
 	   -uaux(1),
 	   -uaux(2),
@@ -306,15 +353,15 @@ class AsmcController : public rclcpp::Node{
       uaux(2) = 100 * (uaux(2) + 1.0)/(2.0) - 50;
       uaux(3) = 100 * (uaux(3) + 1.0)/(2.0) - 50;*/
       
-      /*u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
+      u_t(0) = 200 * (u_t(0) + 1.6)/(3.2) - 100;
       u_t(1) = 200 * (u_t(1) + 1.6)/(3.2) - 100;
       u_t(2) = 200 * (u_t(2) + 1.0)/(2.0) - 100;
-      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;*/
+      u_t(3) = 200 * (u_t(3) + 1.0)/(2.0) - 100;
       
-      u_t(0) = 50 * (u_t(0) + 1.6)/(3.2) - 25;
+      /*u_t(0) = 50 * (u_t(0) + 1.6)/(3.2) - 25;
       u_t(1) = 50 * (u_t(1) + 1.6)/(3.2) - 25;
       u_t(2) = 50 * (u_t(2) + 1.0)/(2.0) - 25;
-      u_t(3) = 50 * (u_t(3) + 1.0)/(2.0) - 25;
+      u_t(3) = 50 * (u_t(3) + 1.0)/(2.0) - 25;*/
 
       /*_uaux.linear.x =  uaux(0);
       _uaux.linear.y =  uaux(1);
@@ -322,11 +369,13 @@ class AsmcController : public rclcpp::Node{
       _uaux.angular.z = uaux(3);*/
 
       // Check axis with respect to vicon
-      _uaux.linear.x  = -u_t(1);  
-      _uaux.linear.y  = u_t(0); 
+      //_uaux.linear.x  = -u_t(1);  
+      //_uaux.linear.y  = u_t(0); 
+      _uaux.linear.x  = u_t(0);  
+      _uaux.linear.y  = u_t(1); 
       _uaux.linear.z  = u_t(2); 
-      //_uaux.angular.z = u_t(3);
-      _uaux.angular.z = -u_t(3);
+      _uaux.angular.z = u_t(3);
+      //_uaux.angular.z = -u_t(3);
       //_uaux.angular.z = 0.0; 
 
       _sigma.linear.x = sigma(0);
