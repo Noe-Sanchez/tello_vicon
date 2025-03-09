@@ -30,6 +30,27 @@ def generate_launch_description():
       #remappings=[('/tello_vicon_pose', '/tello_vicon_pose_' + str(i))]
       #))
 
+  ld.append(Node(
+    package='tello_vicon',
+    executable='traffic_control_node',
+    name='traffic_control_node',
+    output='screen',
+    parameters=[{'num_drones': num_drones}]))
+
+  ld.append(Node(
+    package='tello_vicon',
+    executable='tello_description.py',
+    name='tello_description',
+    output='screen',
+    parameters=[{'num_drones': num_drones}]))
+
+  ld.append(Node(
+    package='tello_vicon',
+    executable='show_start.py',
+    name='tello_vicon_node',
+    output='screen',
+    parameters=[{'num_drones': num_drones}]))
+
   return LaunchDescription(ld)
 
 

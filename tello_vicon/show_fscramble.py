@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Point, Twist, TwistStamped, PoseArray, Pose  
 from std_msgs.msg import String, Int32
+from std_srvs.srv import Empty
 import time
 import math
 # Qos durability
@@ -38,6 +39,9 @@ class TelloReference(Node):
     self.formation_dot_definition_publisher = self.create_publisher(PoseArray, '/formation/velocity', 10)
     self.formation_dot_definition = PoseArray()
 
+    # Register service for scramble
+    self.scramble_service = self.create_service(Empty, 'scramble', self.scramble_callback)
+
     self.timer = self.create_timer(0.01, self.timer_callback)
 
     self.follower_pose_list = []
@@ -58,6 +62,22 @@ class TelloReference(Node):
       #if rand_val not in self.scramble_vector:
       #  self.scramble_vector.append(rand_val)
     print("New configuration: ", self.scramble_vector)
+
+  def scramble_callback(self, request, response) -> Empty: 
+    self.scramble_vector = []
+    for i in range(self.num_drones):
+      print(i)
+      # Apend random element
+      while True:
+        rand_val = random.randint(0, self.num_drones-1)
+        if rand_val not in self.scramble_vector:
+          self.scramble_vector.append(rand_val)
+          break
+      #if rand_val not in self.scramble_vector:
+      #  self.scramble_vector.append(rand_val)
+    print("New configuration: ", self.scramble_vector)
+    response = Empty.Response()
+    return response
 
   def timer_callback(self) -> None:
     # Leader

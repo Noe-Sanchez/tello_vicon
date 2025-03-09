@@ -37,6 +37,13 @@ class TrafficControl : public rclcpp::Node{
       this->declare_parameter("num_drones", 0);
       num_drones = this->get_parameter("num_drones").as_int();
 
+      this->declare_parameter("field_range", 0.9);
+      field_range = this->get_parameter("field_range").as_double();
+      this->declare_parameter("field_multiplier", 1.5);
+      field_multiplier = this->get_parameter("field_multiplier").as_double();
+      this->declare_parameter("field_enable", true);
+      field_enable = this->get_parameter("field_enable").as_bool();
+
       // Formation definition subscriber
       formation_definition_subscription     = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation/definition", 10, std::bind(&TrafficControl::formation_definition_callback, this, std::placeholders::_1));
       formation_dot_definition_subscription = this->create_subscription<geometry_msgs::msg::PoseArray>("/formation/velocity", 10, std::bind(&TrafficControl::formation_dot_definition_callback, this, std::placeholders::_1));
@@ -111,6 +118,7 @@ class TrafficControl : public rclcpp::Node{
 
 	follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/reference/pose", 10));
 	follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/reference/velocity", 10));
+	error_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/formation/error", 10));
 	//follower_pose_publishers.push_back(this->create_publisher<geometry_msgs::msg::PoseStamped>("/tello_" + std::to_string(i) + "/tello/echo/pose", 10));
 	//follower_vel_publishers.push_back(this->create_publisher<geometry_msgs::msg::TwistStamped>("/tello_" + std::to_string(i) + "/tello/echo/velocity", 10));
 	
@@ -156,8 +164,13 @@ class TrafficControl : public rclcpp::Node{
     }
 
     void control_callback(){
+      field_multiplier = this->get_parameter("field_multiplier").as_double();
+      field_range      = this->get_parameter("field_range").as_double();
+      field_enable     = this->get_parameter("field_enable").as_bool();
+
       //std::cout << "Control callback" << std::endl;
-      for (int i = 0; i < avoidance_permutations+1; i++){ 
+      //for (int i = 0; i < avoidance_permutations+1; i++){ 
+      for (int i = 0; i < num_drones; i++){ 
       //std::cout << "Will try to access gammaf " << i << std::endl;
 	gammaf[i] << 0, 0, 0, 0;
       }
@@ -169,18 +182,27 @@ class TrafficControl : public rclcpp::Node{
   	    //std::cout << "Will try to compute gammaf " << i << " and " << j << std::endl;
   	    //Eigen::Vector4d distance = dfs[i] - dfs[j];
   	    Eigen::Vector4d distance = ufs_int[i] - ufs_int[j]; 
+	    Eigen::Vector4d valambda = ufs[i]     - ufs[j];
+  	    //Eigen::Vector4d distance = dfs[i] - dfs[j]; 
+	    //Eigen::Vector4d valambda = vfs[i]     - vfs[j];
   	    //std::cout << "Distance between " << i << " and " << j << ": " << distance << std::endl;
   	    
   	    // Compute unit vector of distance
   	    //distance = distance / distance.norm();
   	    Eigen::Vector4d distance_unit = distance / (distance.norm() + 0.001);
+	    double ealambda = pow((valambda.transpose() * distance_unit).norm(), 2) + (ufs[j] - ufs[i]).norm(); 
+	    //double ealambda = (ufs[j] - ufs[i]).norm(); 
+	    //double ealambda = pow((valambda.transpose() * distance_unit).norm(), 2);
   	    
   	    //std::cout << "Distance norm: " << distance.norm() << " norm of distance_unit: " << distance_unit.norm() << std::endl; 
   
   	    // Express avoidance in terms of distance
   	    //if (distance.norm() < 0.5){
   	    //if (abs(distance.norm()) < 1.5){
-  	    if (abs(distance.norm()) < 0.5){
+	    //if (abs(distance.norm()) < 0.5){
+            //if (abs(distance.norm()) < 1.0){
+  	    //if (abs(distance.norm()) < field_range){ 
+  	    if ((abs(distance.norm()) < field_range) && field_enable){
 	      //gammaf[i] +=    distance_unit*(1/(distance.norm()+0.001));
   	      //gammaf[j] += -1*distance_unit*(1/(distance.norm()+0.001)); 
 
@@ -188,9 +210,37 @@ class TrafficControl : public rclcpp::Node{
 	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
 	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
 	      
-	      gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001)); 
-	      gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
-	      gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
+	      //gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001)); 
+	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
+	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
+
+	      //gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001))*ealambda;
+	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001))*ealambda;
+	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001))*ealambda;
+	      
+	      //gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*(1/(distance.norm()+0.001));
+	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*(1/(distance.norm()+0.001));
+	      //gammaf[i](3) +=   (distance_unit(3))*(1/(distance.norm()+0.001));
+	      
+	      //gammaf[i](1) +=   (distance_unit(1)-distance_unit(2))*ealambda;
+	      //gammaf[i](2) +=   (distance_unit(1)+distance_unit(2))*ealambda;
+	      //gammaf[i](3) +=   (distance_unit(3))*ealambda;
+	      
+	      //gammaf[i](1) +=   (distance(1)-distance(2))*ealambda;
+	      //gammaf[i](2) +=   (distance(1)+distance(2))*ealambda;
+	      //gammaf[i](3) +=   (distance(3))*ealambda;
+
+	      //gammaf[i](1) +=   (distance(1)-distance(2))*(1/(distance.norm()+0.001))*ealambda;
+	      //gammaf[i](2) +=   (distance(1)+distance(2))*(1/(distance.norm()+0.001))*ealambda;
+	      //gammaf[i](3) +=   (distance(3))*(1/(distance.norm()+0.001))*ealambda;
+
+	      //gammaf[i](1) +=   (distance(1)-distance(2))*(1/(distance.norm()+0.001))*field_multiplier;
+	      //gammaf[i](2) +=   (distance(1)+distance(2))*(1/(distance.norm()+0.001))*field_multiplier;
+	      //gammaf[i](3) +=   (distance(3))*(1/(distance.norm()+0.001))*field_multiplier;
+
+	      gammaf[i](1) +=   (distance(1)-distance(2))*ealambda*field_multiplier;
+	      gammaf[i](2) +=   (distance(1)+distance(2))*ealambda*field_multiplier;
+	      gammaf[i](3) +=   (distance(3))*ealambda*field_multiplier;
 
 	      gammaf[j](1) += -1*gammaf[i](1);
 	      gammaf[j](2) += -1*gammaf[i](2);
@@ -199,7 +249,11 @@ class TrafficControl : public rclcpp::Node{
 
   	      //gammaf[i] +=    distance_unit*0.6;
   	      //gammaf[j] += -1*distance_unit*0.6;
-	      std::cout << "Will try to compute gammaf " << i << " and " << j << " with mag " << gammaf[i].norm() << std::endl; 
+  	      //gammaf[i] +=    distance_unit*field_multiplier;
+  	      //gammaf[j] += -1*distance_unit*field_multiplier;
+  	      //gammaf[i] +=    distance_unit*field_multiplier*ealambda;
+  	      //gammaf[j] += -1*distance_unit*field_multiplier*ealambda;
+	      //std::cout << "Will try to compute gammaf " << i << " and " << j << " with mag " << gammaf[i].norm() << std::endl; 
   	    }
   	    //else{
   	    //  gammaf[i] << 0, 0, 0, 0;
@@ -392,6 +446,28 @@ class TrafficControl : public rclcpp::Node{
 
 	follower_pose_publishers[i]->publish(follower_pose_msgs[i]);
 	follower_vel_publishers[i]->publish(follower_vel_msgs[i]);
+
+        geometry_msgs::msg::PoseStamped error_msg;
+	Eigen::Vector4d _error;
+	_error << 0,
+	       Gammasd[i](1) - dfs[i](1),
+	       Gammasd[i](2) - dfs[i](2),
+               Gammasd[i](3);
+	//_error << 0,
+	//	  Gammasd[i](1),
+	//	  Gammasd[i](2),
+	//	  Gammasd[i](3);
+	//_error << 0, 0, 0, 0;
+	//error = kronecker(qfs_conj[i], kronecker(ql, Gammas[i])); 
+	//_error = kronecker(ql, kronecker(efs[i], ql_conj));
+	//_error = kronecker(ql, kronecker(_error, ql_conj));
+	//_error = kronecker(qfs_conj[i], kronecker(_error+dfs[i]-dl, qfs[i]));
+	//_error = kronecker(qfs_conj[i], kronecker(_error, qfs[i]));
+	error_msg.pose.position.x = _error(1);
+	error_msg.pose.position.y = _error(2);
+	error_msg.pose.position.z = _error(3);
+	error_msg.header.frame_id = "tello" + std::to_string(i);
+	error_publishers[i]->publish(error_msg);
       
 	// Publish transform
 	leader_transform.header.stamp = this->now();
@@ -498,8 +574,11 @@ class TrafficControl : public rclcpp::Node{
     }
 
   private:
-    int num_drones; // Number of agents (leader is not included) 
-    int avoidance_permutations; // Number of unique follower pairs
+    int    num_drones;             // Number of agents (leader is not included) 
+    int    avoidance_permutations; // Number of unique follower pairs
+    double field_multiplier;       // Field multiplier for the formation control
+    double field_range;            // Field range for the formation control
+    bool   field_enable;           // Field enable for the formation control
 
     Eigen::Vector4d              dl;           // World position of the leader [0, x, y, z]^T
     Eigen::Vector4d              vl;           // World velocity of the leader [x_dot, y_dot, z_dot, yaw_dot]^T
@@ -545,6 +624,7 @@ class TrafficControl : public rclcpp::Node{
     std::vector<rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr> follower_vel_subscriptions;
     std::vector<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr>     follower_pose_publishers;
     std::vector<rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr>    follower_vel_publishers;
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr>     error_publishers;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  		   leader_pose_subscription;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr  		   leader_velocity_subscription;
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr  		   formation_definition_subscription;

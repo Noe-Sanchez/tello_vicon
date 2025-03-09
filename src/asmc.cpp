@@ -238,10 +238,15 @@ class AsmcController : public rclcpp::Node{
 	   -uaux(1), 
 	   -uaux(2), 
 	   -uaux(3) - term2(2);*/
-      u << -uaux(0) + term1(0) * term2(0),
+      /*u << -uaux(0) + term1(0) * term2(0),
 	   -uaux(1) + term1(1) * term2(1),
 	   -uaux(2) + term1(2) * term2(2),
-	   -uaux(3) - term2(2) + term1(3) * term3(2);
+	   -uaux(3) - term2(2) + term1(3) * term3(2);*/
+      
+      u << -uaux(0) + term1(0) * term3(0),
+	   -uaux(1) + term1(1) * term3(1),
+	   -uaux(2) + term1(2) * term3(2),
+	   -uaux(3) - term2(2) + term1(3) * term3(3);
 
 	   //-uaux(3);*/
 
@@ -324,6 +329,8 @@ class AsmcController : public rclcpp::Node{
       _error.pose.position.y = e(1);
       _error.pose.position.z = e(2);
       _error.pose.orientation.w = e(3);
+      // Use id as frame_id
+      _error.header.frame_id = "tello" + std::to_string(drone_id);
 
       _ref_rot.pose.position.x = u_rot(1);
       _ref_rot.pose.position.y = u_rot(2);

@@ -1,0 +1,10 @@
+shell "/usr/bin/zsh"
+startup_message off
+altscreen on
+
+zombie kr
+
+screen -t "multi_launch"  0 zsh -c "ros2 launch tello_vicon multi_sim_launch.py num_drones:=12"
+screen -t "4scramble"     1 zsh -c "ros2 run tello_vicon show_4scramble.py --ros-args -p num_drones:=12"
+screen -t "fox"           2 zsh -c "ros2 launch foxglove_bridge foxglove_bridge_launch.xml"
+screen -t "model_library" 3 zsh -c "cd /root/model_library && ./node_modules/.bin/nodemon ."

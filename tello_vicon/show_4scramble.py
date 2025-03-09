@@ -40,6 +40,8 @@ class TelloReference(Node):
 
     self.timer = self.create_timer(0.01, self.timer_callback)
 
+    #self.do_scramble_subscriber = 
+
     self.follower_pose_list = []
     self.follower_velocity_list = []
     for i in range(self.num_drones):
